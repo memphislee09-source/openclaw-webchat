@@ -8,9 +8,15 @@
 ## 本次会话进展
 - [x] 创建项目目录
 - [x] 创建 `status.md`
-- [ ] 建立基础文档结构
-- [ ] 初始化 Git 仓库并完成首个提交
-- [ ] 创建 GitHub 仓库并推送同步
+- [x] 建立基础文档结构
+- [x] 初始化 Git 仓库并完成首个提交
+- [x] 创建 GitHub 仓库并推送同步
+
+## 仓库信息
+- 本地路径：`/Users/memphis/.openclaw/workspace-mira/openclaw-webchat`
+- GitHub：`https://github.com/memphislee09-source/openclaw-webchat`
+- 可见性：`private`
+- 默认分支：`main`
 
 ## 下一步
 1. 明确 v0.1 范围（MVP）
