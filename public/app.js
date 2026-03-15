@@ -11,6 +11,15 @@ const state = {
   pollingTimer: null,
   selectedOpenPromise: null,
   settingsOpen: false,
+  mediaViewerOpen: false,
+  mediaViewerScale: 1,
+  mediaViewerOffsetX: 0,
+  mediaViewerOffsetY: 0,
+  mediaViewerDragging: false,
+  mediaViewerPointerId: null,
+  mediaViewerDragStartX: 0,
+  mediaViewerDragStartY: 0,
+  mediaViewerMoved: false,
   userProfile: {
     displayName: '我',
     avatarUrl: null
@@ -51,6 +60,11 @@ const agentSettingsHintEl = document.getElementById('agentSettingsHint');
 const agentDisplayNameInputEl = document.getElementById('agentDisplayNameInput');
 const agentAvatarUrlInputEl = document.getElementById('agentAvatarUrlInput');
 const saveAgentSettingsButtonEl = document.getElementById('saveAgentSettingsButton');
+const mediaViewerEl = document.getElementById('mediaViewer');
+const mediaViewerImageEl = document.getElementById('mediaViewerImage');
+const mediaZoomOutButtonEl = document.getElementById('mediaZoomOutButton');
+const mediaResetZoomButtonEl = document.getElementById('mediaResetZoomButton');
+const mediaZoomInButtonEl = document.getElementById('mediaZoomInButton');
 const appShellEl = document.querySelector('.app-shell');
 
 boot().catch((error) => showStatus(`初始化失败：${formatError(error)}`, 'error'));
@@ -97,10 +111,30 @@ function bindEvents() {
   userAvatarUrlInputEl.addEventListener('input', renderSettingsPreview);
   agentDisplayNameInputEl.addEventListener('input', renderSettingsPreview);
   agentAvatarUrlInputEl.addEventListener('input', renderSettingsPreview);
+  mediaViewerEl.addEventListener('click', closeMediaViewer);
+  mediaViewerEl.addEventListener('wheel', handleMediaViewerWheel, { passive: false });
+  mediaViewerImageEl.addEventListener('click', handleMediaViewerImageClick);
+  mediaViewerImageEl.addEventListener('pointerdown', handleMediaViewerPointerDown);
+  mediaViewerImageEl.addEventListener('pointermove', handleMediaViewerPointerMove);
+  mediaViewerImageEl.addEventListener('pointerup', handleMediaViewerPointerUp);
+  mediaViewerImageEl.addEventListener('pointercancel', handleMediaViewerPointerUp);
+  mediaZoomOutButtonEl.addEventListener('click', (event) => {
+    event.stopPropagation();
+    adjustMediaViewerScale(-0.2);
+  });
+  mediaResetZoomButtonEl.addEventListener('click', (event) => {
+    event.stopPropagation();
+    setMediaViewerScale(1);
+  });
+  mediaZoomInButtonEl.addEventListener('click', (event) => {
+    event.stopPropagation();
+    adjustMediaViewerScale(0.2);
+  });
 
   window.addEventListener('resize', () => {
     if (window.innerWidth > 900) toggleSidebar(false);
   });
+  window.addEventListener('keydown', handleWindowKeydown);
 }
 
 async function loadSettings() {
@@ -303,8 +337,14 @@ function renderMediaBlock(block) {
   }
 
   if (block.type === 'image') {
-    const wrapper = createMediaCard(block, '图片');
+    const wrapper = document.createElement('button');
+    wrapper.type = 'button';
+    wrapper.className = 'message-image-button';
+    wrapper.setAttribute('aria-label', '查看图片');
+    wrapper.addEventListener('click', () => openMediaViewer(block));
+
     const image = document.createElement('img');
+    image.className = 'message-image';
     image.src = block.url;
     image.alt = block.name || '图片';
     image.loading = 'lazy';
@@ -334,8 +374,11 @@ function renderMediaBlock(block) {
   }
 
   if (block.type === 'video') {
-    const wrapper = createMediaCard(block, '视频');
+    const wrapper = document.createElement('div');
+    wrapper.className = 'message-video-shell';
+
     const video = document.createElement('video');
+    video.className = 'message-video';
     video.controls = true;
     video.preload = 'metadata';
     video.src = block.url;
@@ -779,6 +822,115 @@ function readFileAsBase64(file) {
     };
     reader.readAsDataURL(file);
   });
+}
+
+function openMediaViewer(block) {
+  if (!block?.url) return;
+  state.mediaViewerOpen = true;
+  state.mediaViewerScale = 1;
+  state.mediaViewerOffsetX = 0;
+  state.mediaViewerOffsetY = 0;
+  state.mediaViewerDragging = false;
+  state.mediaViewerPointerId = null;
+  state.mediaViewerMoved = false;
+  mediaViewerImageEl.src = block.url;
+  mediaViewerImageEl.alt = block.name || '图片预览';
+  mediaViewerEl.hidden = false;
+  mediaViewerEl.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+  applyMediaViewerTransform();
+}
+
+function closeMediaViewer() {
+  if (!state.mediaViewerOpen) return;
+  state.mediaViewerOpen = false;
+  state.mediaViewerScale = 1;
+  state.mediaViewerOffsetX = 0;
+  state.mediaViewerOffsetY = 0;
+  state.mediaViewerDragging = false;
+  state.mediaViewerPointerId = null;
+  state.mediaViewerMoved = false;
+  mediaViewerEl.hidden = true;
+  mediaViewerEl.setAttribute('aria-hidden', 'true');
+  mediaViewerImageEl.removeAttribute('src');
+  document.body.style.overflow = '';
+}
+
+function handleMediaViewerWheel(event) {
+  if (!state.mediaViewerOpen) return;
+  event.preventDefault();
+  adjustMediaViewerScale(event.deltaY < 0 ? 0.12 : -0.12);
+}
+
+function adjustMediaViewerScale(delta) {
+  setMediaViewerScale(state.mediaViewerScale + delta);
+}
+
+function setMediaViewerScale(nextScale) {
+  state.mediaViewerScale = Math.min(4, Math.max(0.6, Number(nextScale) || 1));
+  if (state.mediaViewerScale <= 1) {
+    state.mediaViewerOffsetX = 0;
+    state.mediaViewerOffsetY = 0;
+  }
+  applyMediaViewerTransform();
+}
+
+function applyMediaViewerTransform() {
+  mediaViewerImageEl.style.transform = `translate(${state.mediaViewerOffsetX}px, ${state.mediaViewerOffsetY}px) scale(${state.mediaViewerScale})`;
+  mediaViewerImageEl.classList.toggle('is-draggable', state.mediaViewerScale > 1);
+  mediaViewerImageEl.classList.toggle('is-dragging', state.mediaViewerDragging);
+}
+
+function handleMediaViewerImageClick(event) {
+  event.stopPropagation();
+  if (state.mediaViewerMoved) {
+    state.mediaViewerMoved = false;
+    return;
+  }
+  closeMediaViewer();
+}
+
+function handleMediaViewerPointerDown(event) {
+  if (!state.mediaViewerOpen || state.mediaViewerScale <= 1) return;
+  event.preventDefault();
+  event.stopPropagation();
+  state.mediaViewerDragging = true;
+  state.mediaViewerPointerId = event.pointerId;
+  state.mediaViewerDragStartX = event.clientX - state.mediaViewerOffsetX;
+  state.mediaViewerDragStartY = event.clientY - state.mediaViewerOffsetY;
+  state.mediaViewerMoved = false;
+  mediaViewerImageEl.setPointerCapture(event.pointerId);
+  applyMediaViewerTransform();
+}
+
+function handleMediaViewerPointerMove(event) {
+  if (!state.mediaViewerDragging || state.mediaViewerPointerId !== event.pointerId) return;
+  event.preventDefault();
+  const nextX = event.clientX - state.mediaViewerDragStartX;
+  const nextY = event.clientY - state.mediaViewerDragStartY;
+  if (Math.abs(nextX - state.mediaViewerOffsetX) > 1 || Math.abs(nextY - state.mediaViewerOffsetY) > 1) {
+    state.mediaViewerMoved = true;
+  }
+  state.mediaViewerOffsetX = nextX;
+  state.mediaViewerOffsetY = nextY;
+  applyMediaViewerTransform();
+}
+
+function handleMediaViewerPointerUp(event) {
+  if (state.mediaViewerPointerId !== event.pointerId) return;
+  if (mediaViewerImageEl.hasPointerCapture?.(event.pointerId)) {
+    mediaViewerImageEl.releasePointerCapture(event.pointerId);
+  }
+  state.mediaViewerDragging = false;
+  state.mediaViewerPointerId = null;
+  applyMediaViewerTransform();
+}
+
+function handleWindowKeydown(event) {
+  if (event.key === 'Escape' && state.mediaViewerOpen) {
+    closeMediaViewer();
+    return;
+  }
 }
 
 function detectAttachmentKind(file) {

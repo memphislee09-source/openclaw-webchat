@@ -422,12 +422,29 @@ button {
   gap: 10px;
 }
 
-.message-media img,
-.message-media video {
+.message-image-button,
+.message-video-shell {
+  width: fit-content;
   max-width: min(420px, 100%);
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.message-image,
+.message-video {
+  display: block;
+  max-width: min(420px, 100%);
+  width: 100%;
+  max-height: min(60vh, 520px);
   border-radius: 16px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.03);
+  object-fit: contain;
+}
+
+.message-image-button {
+  cursor: zoom-in;
 }
 
 .message-media audio {
@@ -676,6 +693,56 @@ button {
   z-index: 5;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+}
+
+.media-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 7;
+  background: rgba(2, 6, 16, 0.96);
+  display: grid;
+  place-items: center;
+  cursor: zoom-out;
+  padding: 32px;
+}
+
+.media-viewer[hidden] {
+  display: none;
+}
+
+.media-viewer-toolbar {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 1;
+}
+
+.media-viewer-button {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.media-viewer-image {
+  max-width: min(92vw, 1400px);
+  max-height: 88vh;
+  transform-origin: center center;
+  transition: transform 120ms ease-out;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+  touch-action: none;
+}
+
+.media-viewer-image.is-draggable {
+  cursor: grab;
+}
+
+.media-viewer-image.is-dragging {
+  cursor: grabbing;
+  transition: none;
 }
 
 .app-shell.settings-open .settings-backdrop {

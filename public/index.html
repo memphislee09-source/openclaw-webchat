@@ -148,6 +148,15 @@
           </section>
         </div>
       </aside>
+
+      <div class="media-viewer" id="mediaViewer" hidden aria-hidden="true">
+        <div class="media-viewer-toolbar">
+          <button class="icon-button media-viewer-button" id="mediaZoomOutButton" type="button" aria-label="缩小">－</button>
+          <button class="icon-button media-viewer-button" id="mediaResetZoomButton" type="button" aria-label="重置缩放">1:1</button>
+          <button class="icon-button media-viewer-button" id="mediaZoomInButton" type="button" aria-label="放大">＋</button>
+        </div>
+        <img class="media-viewer-image" id="mediaViewerImage" alt="图片预览" />
+      </div>
     </div>
 
     <template id="messageTextTemplate">
