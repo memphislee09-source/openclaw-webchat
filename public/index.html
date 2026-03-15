@@ -26,11 +26,12 @@
 
         <button class="settings-entry" id="settingsButton" type="button">
           <span>⚙️</span>
-          <span>设置我的头像</span>
+          <span>打开设置</span>
         </button>
       </aside>
 
       <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+      <div class="settings-backdrop" id="settingsBackdrop"></div>
 
       <main class="chat-layout">
         <header class="chat-header">
@@ -64,8 +65,14 @@
                 ></textarea>
               </div>
               <div class="composer-actions">
-                <input id="imageUploadInput" type="file" accept="image/*" multiple hidden />
-                <button class="ghost-button" type="button" id="attachImageButton">加图片</button>
+                <input
+                  id="mediaUploadInput"
+                  type="file"
+                  accept="image/*,audio/*,.m4a,.mp3,.wav,.aac,.ogg,.opus,.flac,.webm"
+                  multiple
+                  hidden
+                />
+                <button class="icon-button attach-button" type="button" id="attachButton" aria-label="上传图片或音频" title="上传图片或音频">+</button>
                 <button class="ghost-button" type="button" id="newContextButton">/new</button>
                 <button class="primary-button" type="submit" id="sendButton">发送</button>
               </div>
@@ -73,6 +80,74 @@
           </div>
         </section>
       </main>
+
+      <aside class="settings-panel" id="settingsPanel" aria-hidden="true">
+        <div class="settings-panel-header">
+          <div>
+            <div class="eyebrow">Display Settings</div>
+            <h3>显示设置</h3>
+          </div>
+          <button class="icon-button" id="closeSettingsButton" type="button" aria-label="关闭设置">✕</button>
+        </div>
+
+        <div class="settings-panel-body">
+          <section class="settings-section">
+            <div class="settings-section-title">我的显示</div>
+            <p class="settings-section-copy">只影响本页面里的用户名和头像，不会改动上游身份。</p>
+            <div class="settings-card">
+              <div class="settings-preview-row">
+                <div class="settings-avatar-preview" id="userAvatarPreview"></div>
+                <div class="settings-preview-copy">
+                  <div class="settings-preview-label">消息区里的“我”</div>
+                  <div class="settings-preview-subtitle" id="userPreviewSubtitle">用于右侧气泡与输入区身份展示</div>
+                </div>
+              </div>
+
+              <label class="settings-field">
+                <span>显示名</span>
+                <input id="userDisplayNameInput" type="text" maxlength="40" placeholder="我" />
+              </label>
+
+              <label class="settings-field">
+                <span>头像 URL</span>
+                <input id="userAvatarUrlInput" type="url" placeholder="https://example.com/avatar.jpg" />
+              </label>
+
+              <div class="settings-actions">
+                <button class="primary-button" id="saveUserSettingsButton" type="button">保存我的设置</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <div class="settings-section-title">当前 Agent</div>
+            <p class="settings-section-copy" id="agentSettingsHint">选择左侧 agent 后，可在这里改本页面显示名和头像。</p>
+            <div class="settings-card">
+              <div class="settings-preview-row">
+                <div class="settings-avatar-preview agent" id="agentAvatarPreview"></div>
+                <div class="settings-preview-copy">
+                  <div class="settings-preview-label" id="agentPreviewTitle">尚未选择 agent</div>
+                  <div class="settings-preview-subtitle" id="agentPreviewSubtitle">左侧列表、顶部标题和消息头像会同步更新</div>
+                </div>
+              </div>
+
+              <label class="settings-field">
+                <span>显示名</span>
+                <input id="agentDisplayNameInput" type="text" maxlength="60" placeholder="选择 agent 后可编辑" />
+              </label>
+
+              <label class="settings-field">
+                <span>头像 URL</span>
+                <input id="agentAvatarUrlInput" type="url" placeholder="https://example.com/agent-avatar.jpg" />
+              </label>
+
+              <div class="settings-actions">
+                <button class="primary-button" id="saveAgentSettingsButton" type="button">保存当前 Agent</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </aside>
     </div>
 
     <template id="messageTextTemplate">

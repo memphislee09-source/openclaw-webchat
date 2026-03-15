@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { execFile } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -25,7 +25,11 @@ const NAMESPACE = 'openclaw-webchat';
 const BOOTSTRAP_VERSION = '2026-03-15.phase1';
 const ACTIVE_RECENT_WINDOW_MS = 5 * 60 * 1000;
 const ASSISTANT_WAIT_TIMEOUT_MS = Number(process.env.OPENCLAW_WEBCHAT_ASSISTANT_WAIT_TIMEOUT_MS || 120000);
-const MAX_UPLOAD_BYTES = Number(process.env.OPENCLAW_WEBCHAT_MAX_UPLOAD_BYTES || 10 * 1024 * 1024);
+const MAX_IMAGE_UPLOAD_BYTES = Number(process.env.OPENCLAW_WEBCHAT_MAX_IMAGE_UPLOAD_BYTES || 10 * 1024 * 1024);
+const MAX_AUDIO_UPLOAD_BYTES = Number(process.env.OPENCLAW_WEBCHAT_MAX_AUDIO_UPLOAD_BYTES || 20 * 1024 * 1024);
+const WHISPER_BIN = process.env.OPENCLAW_WEBCHAT_WHISPER_BIN || 'whisper';
+const WHISPER_MODEL = process.env.OPENCLAW_WEBCHAT_WHISPER_MODEL || 'tiny';
+const WHISPER_TIMEOUT_MS = Number(process.env.OPENCLAW_WEBCHAT_WHISPER_TIMEOUT_MS || 45000);
 
 const BOOTSTRAP_TEXT = [
   '[openclaw-webchat hidden bootstrap]',
@@ -209,17 +213,18 @@ app.post('/api/openclaw-webchat/uploads', (req, res) => {
   const filename = normalizeOptionalString(req.body?.filename) || 'upload';
   const mimeType = normalizeOptionalString(req.body?.mimeType) || 'application/octet-stream';
   const contentBase64 = normalizeOptionalString(req.body?.contentBase64);
+  const transcribe = req.body?.transcribe !== false;
 
-  if (kind !== 'image') {
-    return res.status(400).json({ error: 'Only image uploads are supported right now.' });
+  if (!['image', 'audio'].includes(kind)) {
+    return res.status(400).json({ error: 'Only image and audio uploads are supported right now.' });
   }
 
   if (!contentBase64) {
     return res.status(400).json({ error: 'Upload content is empty.' });
   }
 
-  if (!isSupportedUploadMime(kind, mimeType) && !isImageFilename(filename)) {
-    return res.status(400).json({ error: 'Unsupported image type.' });
+  if (!isSupportedUploadMime(kind, mimeType) && !isUploadFilenameKind(kind, filename)) {
+    return res.status(400).json({ error: `Unsupported ${kind} type.` });
   }
 
   try {
@@ -228,16 +233,30 @@ app.post('/api/openclaw-webchat/uploads', (req, res) => {
       return res.status(400).json({ error: 'Upload content is empty.' });
     }
 
-    if (buffer.byteLength > MAX_UPLOAD_BYTES) {
-      return res.status(413).json({ error: `Image is too large. Limit is ${Math.floor(MAX_UPLOAD_BYTES / (1024 * 1024))} MB.` });
+    const maxBytes = kind === 'audio' ? MAX_AUDIO_UPLOAD_BYTES : MAX_IMAGE_UPLOAD_BYTES;
+    if (buffer.byteLength > maxBytes) {
+      return res.status(413).json({ error: `${kind === 'audio' ? 'Audio' : 'Image'} is too large. Limit is ${Math.floor(maxBytes / (1024 * 1024))} MB.` });
     }
 
     const stored = persistUpload({ kind, filename, mimeType, buffer });
     const block = {
       type: kind,
       source: stored.filePath,
-      name: stored.displayName
+      name: stored.displayName,
+      mimeType,
+      sizeBytes: buffer.byteLength
     };
+
+    if (kind === 'audio' && transcribe) {
+      const transcription = transcribeAudioFile(stored.filePath, stored.displayName);
+      if (transcription.ok) {
+        block.transcriptStatus = 'ready';
+        block.transcriptText = transcription.text;
+      } else {
+        block.transcriptStatus = 'failed';
+        block.transcriptError = transcription.error;
+      }
+    }
 
     res.json({
       ok: true,
@@ -246,7 +265,10 @@ app.post('/api/openclaw-webchat/uploads', (req, res) => {
         source: stored.filePath,
         name: stored.displayName,
         size: buffer.byteLength,
-        mimeType
+        mimeType,
+        transcriptStatus: block.transcriptStatus || null,
+        transcriptText: block.transcriptText || null,
+        transcriptError: block.transcriptError || null
       },
       block: presentBlock(block)
     });
@@ -445,6 +467,7 @@ function buildUpstreamSessionKey(agentId) {
 function buildUpstreamMessage(blocks) {
   const textParts = [];
   const attachmentHints = [];
+  const transcriptHints = [];
 
   for (const block of blocks) {
     if (block.type === 'text' && block.text) {
@@ -455,7 +478,13 @@ function buildUpstreamMessage(blocks) {
     if (['image', 'audio', 'video', 'file'].includes(block.type)) {
       const source = String(block.source || '').trim();
       if (!source) continue;
-      attachmentHints.push(`- ${block.type}: ${source}`);
+      const displayName = normalizeOptionalString(block.name) || path.basename(source);
+      attachmentHints.push(`- ${block.type}: ${displayName} (${source})`);
+      if (block.type === 'audio' && block.transcriptStatus === 'ready' && block.transcriptText) {
+        transcriptHints.push(`- ${displayName}:\n${indentText(String(block.transcriptText), '  ')}`);
+      } else if (block.type === 'audio' && block.transcriptStatus === 'failed') {
+        transcriptHints.push(`- ${displayName}: transcript unavailable`);
+      }
     }
   }
 
@@ -465,7 +494,9 @@ function buildUpstreamMessage(blocks) {
     textParts.join('\n\n').trim(),
     '[openclaw-webchat user attachments]',
     'The user uploaded the following files. Use them as input context if relevant, but do not mention this wrapper format unless needed.',
-    ...attachmentHints
+    ...attachmentHints,
+    transcriptHints.length ? '[openclaw-webchat audio transcripts]' : '',
+    ...transcriptHints
   ].filter(Boolean).join('\n');
 }
 
@@ -634,13 +665,23 @@ function normalizeInputBlocks(value) {
   for (const item of value) {
     if (!item || typeof item !== 'object') continue;
     const type = String(item.type || '').toLowerCase();
+    if (type === 'text') {
+      const text = normalizeOptionalString(item.text);
+      if (text) blocks.push({ type: 'text', text });
+      continue;
+    }
     if (!['image', 'audio', 'video', 'file'].includes(type)) continue;
     const source = normalizeOptionalString(item.source || item.url || item.path || item.filePath);
     if (!source) continue;
     blocks.push({
       type,
       source,
-      name: normalizeOptionalString(item.name || item.filename || item.fileName) || path.basename(source)
+      name: normalizeOptionalString(item.name || item.filename || item.fileName) || path.basename(source),
+      mimeType: normalizeOptionalString(item.mimeType || item.contentType) || undefined,
+      transcriptStatus: normalizeOptionalString(item.transcriptStatus) || undefined,
+      transcriptText: normalizeOptionalString(item.transcriptText || item.transcript) || undefined,
+      transcriptError: normalizeOptionalString(item.transcriptError) || undefined,
+      sizeBytes: Number.isFinite(Number(item.sizeBytes || item.size)) ? Number(item.sizeBytes || item.size) : undefined
     });
   }
 
@@ -774,7 +815,10 @@ function presentBlock(block) {
         type: block.type,
         invalid: true,
         invalidReason: '文件丢失',
-        name: block.name || path.basename(source)
+        name: block.name || path.basename(source),
+        transcriptStatus: block.transcriptStatus || null,
+        transcriptText: block.transcriptText || null,
+        transcriptError: block.transcriptError || null
       };
     }
 
@@ -782,14 +826,24 @@ function presentBlock(block) {
     return {
       type: block.type,
       url: `/api/openclaw-webchat/media?token=${encodeURIComponent(token)}`,
-      name: block.name || path.basename(source)
+      name: block.name || path.basename(source),
+      mimeType: block.mimeType || null,
+      sizeBytes: block.sizeBytes || null,
+      transcriptStatus: block.transcriptStatus || null,
+      transcriptText: block.transcriptText || null,
+      transcriptError: block.transcriptError || null
     };
   }
 
   return {
     type: block.type,
     url: source,
-    name: block.name || null
+    name: block.name || null,
+    mimeType: block.mimeType || null,
+    sizeBytes: block.sizeBytes || null,
+    transcriptStatus: block.transcriptStatus || null,
+    transcriptText: block.transcriptText || null,
+    transcriptError: block.transcriptError || null
   };
 }
 
@@ -928,7 +982,12 @@ function normalizeBlock(block) {
   return {
     type,
     source: source || null,
-    name: normalizeOptionalString(block.name) || undefined
+    name: normalizeOptionalString(block.name) || undefined,
+    mimeType: normalizeOptionalString(block.mimeType || block.contentType) || undefined,
+    transcriptStatus: normalizeOptionalString(block.transcriptStatus) || undefined,
+    transcriptText: normalizeOptionalString(block.transcriptText || block.transcript) || undefined,
+    transcriptError: normalizeOptionalString(block.transcriptError) || undefined,
+    sizeBytes: Number.isFinite(Number(block.sizeBytes || block.size)) ? Number(block.sizeBytes || block.size) : undefined
   };
 }
 
@@ -942,12 +1001,13 @@ function guessMediaTypeByPath(value) {
 
 function isSupportedUploadMime(kind, mimeType) {
   const mime = String(mimeType || '').toLowerCase();
-  if (kind !== 'image') return false;
-  return /^image\/(png|jpeg|jpg|gif|webp|bmp|svg\+xml)$/.test(mime);
+  if (kind === 'image') return /^image\/(png|jpeg|jpg|gif|webp|bmp|svg\+xml)$/.test(mime);
+  if (kind === 'audio') return /^audio\/(mpeg|mp3|wav|x-wav|wave|mp4|x-m4a|aac|ogg|opus|flac|webm)$/.test(mime);
+  return false;
 }
 
-function isImageFilename(filename) {
-  return guessMediaTypeByPath(filename) === 'image';
+function isUploadFilenameKind(kind, filename) {
+  return guessMediaTypeByPath(filename) === kind;
 }
 
 function sanitizeUploadBaseName(filename) {
@@ -974,7 +1034,70 @@ function inferUploadExtension(filename, mimeType, kind) {
     return '.png';
   }
 
+  if (kind === 'audio') {
+    if (mime === 'audio/mpeg' || mime === 'audio/mp3') return '.mp3';
+    if (mime === 'audio/wav' || mime === 'audio/x-wav' || mime === 'audio/wave') return '.wav';
+    if (mime === 'audio/mp4' || mime === 'audio/x-m4a') return '.m4a';
+    if (mime === 'audio/aac') return '.aac';
+    if (mime === 'audio/ogg') return '.ogg';
+    if (mime === 'audio/opus') return '.opus';
+    if (mime === 'audio/flac') return '.flac';
+    if (mime === 'audio/webm') return '.webm';
+    return '.m4a';
+  }
+
   return '.bin';
+}
+
+function transcribeAudioFile(filePath, displayName) {
+  const tempDir = fs.mkdtempSync(path.join(DATA_DIR, 'whisper-'));
+
+  try {
+    const result = spawnSync(WHISPER_BIN, [
+      filePath,
+      '--model',
+      WHISPER_MODEL,
+      '--output_format',
+      'txt',
+      '--output_dir',
+      tempDir,
+      '--verbose',
+      'False'
+    ], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      timeout: WHISPER_TIMEOUT_MS,
+      maxBuffer: 8 * 1024 * 1024
+    });
+
+    if (result.error) throw result.error;
+    if (result.status !== 0) {
+      throw new Error(String(result.stderr || result.stdout || `${WHISPER_BIN} exited with ${result.status}`).trim());
+    }
+
+    const transcriptPath = path.join(tempDir, `${path.parse(filePath).name}.txt`);
+    if (!fs.existsSync(transcriptPath)) {
+      return { ok: false, error: `转写失败：${displayName || '音频'} 未生成文本结果` };
+    }
+
+    const text = fs.readFileSync(transcriptPath, 'utf8').replace(/\r\n/g, '\n').trim();
+    if (!text) {
+      return { ok: false, error: '转写失败：未识别到文本' };
+    }
+
+    return { ok: true, text };
+  } catch (error) {
+    return { ok: false, error: `转写失败：${formatError(error)}` };
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+function indentText(text, indent) {
+  return String(text || '')
+    .split('\n')
+    .map((line) => `${indent}${line}`)
+    .join('\n');
 }
 
 function cleanMediaValue(value) {

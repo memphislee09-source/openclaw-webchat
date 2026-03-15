@@ -10,6 +10,7 @@ const state = {
   sending: false,
   pollingTimer: null,
   selectedOpenPromise: null,
+  settingsOpen: false,
   userProfile: {
     displayName: '我',
     avatarUrl: null
@@ -26,8 +27,8 @@ const composerFormEl = document.getElementById('composerForm');
 const composerInputEl = document.getElementById('composerInput');
 const sendButtonEl = document.getElementById('sendButton');
 const newContextButtonEl = document.getElementById('newContextButton');
-const attachImageButtonEl = document.getElementById('attachImageButton');
-const imageUploadInputEl = document.getElementById('imageUploadInput');
+const attachButtonEl = document.getElementById('attachButton');
+const mediaUploadInputEl = document.getElementById('mediaUploadInput');
 const pendingUploadsEl = document.getElementById('pendingUploads');
 const openSidebarButtonEl = document.getElementById('openSidebarButton');
 const closeSidebarButtonEl = document.getElementById('closeSidebarButton');
@@ -35,6 +36,21 @@ const sidebarBackdropEl = document.getElementById('sidebarBackdrop');
 const headerRefreshButtonEl = document.getElementById('headerRefreshButton');
 const refreshAgentsButtonEl = document.getElementById('refreshAgentsButton');
 const settingsButtonEl = document.getElementById('settingsButton');
+const settingsBackdropEl = document.getElementById('settingsBackdrop');
+const settingsPanelEl = document.getElementById('settingsPanel');
+const closeSettingsButtonEl = document.getElementById('closeSettingsButton');
+const userAvatarPreviewEl = document.getElementById('userAvatarPreview');
+const userPreviewSubtitleEl = document.getElementById('userPreviewSubtitle');
+const userDisplayNameInputEl = document.getElementById('userDisplayNameInput');
+const userAvatarUrlInputEl = document.getElementById('userAvatarUrlInput');
+const saveUserSettingsButtonEl = document.getElementById('saveUserSettingsButton');
+const agentAvatarPreviewEl = document.getElementById('agentAvatarPreview');
+const agentPreviewTitleEl = document.getElementById('agentPreviewTitle');
+const agentPreviewSubtitleEl = document.getElementById('agentPreviewSubtitle');
+const agentSettingsHintEl = document.getElementById('agentSettingsHint');
+const agentDisplayNameInputEl = document.getElementById('agentDisplayNameInput');
+const agentAvatarUrlInputEl = document.getElementById('agentAvatarUrlInput');
+const saveAgentSettingsButtonEl = document.getElementById('saveAgentSettingsButton');
 const appShellEl = document.querySelector('.app-shell');
 
 boot().catch((error) => showStatus(`初始化失败：${formatError(error)}`, 'error'));
@@ -52,8 +68,8 @@ function bindEvents() {
   newContextButtonEl.addEventListener('click', handleNewContext);
   headerRefreshButtonEl.addEventListener('click', () => refreshAgents({ autoOpen: false, refreshCurrent: true }));
   refreshAgentsButtonEl?.addEventListener('click', () => refreshAgents({ autoOpen: false, refreshCurrent: true }));
-  attachImageButtonEl.addEventListener('click', () => imageUploadInputEl.click());
-  imageUploadInputEl.addEventListener('change', handleImageSelection);
+  attachButtonEl.addEventListener('click', () => mediaUploadInputEl.click());
+  mediaUploadInputEl.addEventListener('change', handleFileSelection);
   composerInputEl.addEventListener('input', autoResizeComposer);
   composerInputEl.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -71,7 +87,17 @@ function bindEvents() {
   openSidebarButtonEl.addEventListener('click', () => toggleSidebar(true));
   closeSidebarButtonEl.addEventListener('click', () => toggleSidebar(false));
   sidebarBackdropEl.addEventListener('click', () => toggleSidebar(false));
-  settingsButtonEl.addEventListener('click', openSettingsQuickEditor);
+
+  settingsButtonEl.addEventListener('click', () => toggleSettingsPanel(true));
+  closeSettingsButtonEl.addEventListener('click', () => toggleSettingsPanel(false));
+  settingsBackdropEl.addEventListener('click', () => toggleSettingsPanel(false));
+  saveUserSettingsButtonEl.addEventListener('click', saveUserSettings);
+  saveAgentSettingsButtonEl.addEventListener('click', saveAgentSettings);
+  userDisplayNameInputEl.addEventListener('input', renderSettingsPreview);
+  userAvatarUrlInputEl.addEventListener('input', renderSettingsPreview);
+  agentDisplayNameInputEl.addEventListener('input', renderSettingsPreview);
+  agentAvatarUrlInputEl.addEventListener('input', renderSettingsPreview);
+
   window.addEventListener('resize', () => {
     if (window.innerWidth > 900) toggleSidebar(false);
   });
@@ -87,6 +113,8 @@ async function loadSettings() {
   } catch {
     state.userProfile = { displayName: '我', avatarUrl: null };
   }
+
+  populateSettingsForm();
 }
 
 async function refreshAgents({ autoOpen = false, refreshCurrent = false } = {}) {
@@ -95,6 +123,7 @@ async function refreshAgents({ autoOpen = false, refreshCurrent = false } = {}) 
   state.agents = Array.isArray(data.agents) ? data.agents : [];
   renderAgentList();
   updateHeader();
+  populateSettingsForm();
 
   const nextAgentId = previousActive && state.agents.some((item) => item.agentId === previousActive)
     ? previousActive
@@ -165,6 +194,7 @@ async function openAgent(agentId, { forceReload = false, preserveScrollBottom = 
   state.activeAgentId = agentId;
   renderAgentList();
   updateHeader();
+  populateSettingsForm();
   showStatus('正在打开会话…', 'info');
   toggleSidebar(false);
 
@@ -176,6 +206,7 @@ async function openAgent(agentId, { forceReload = false, preserveScrollBottom = 
     state.hasMore = Boolean(response.history?.hasMore);
     renderMessages();
     updateHeader();
+    populateSettingsForm();
     if (!preserveScrollBottom) scrollMessagesToBottom();
     showStatus(response.created ? '已创建并进入该 agent 的长期主时间线。' : '会话已恢复。', 'success');
   })();
@@ -198,7 +229,7 @@ function renderMessages() {
     empty.innerHTML = `
       <div class="eyebrow">openclaw-webchat</div>
       <h3>当前时间线还没有消息</h3>
-      <p class="empty-tip">最新消息会贴着输入框显示，旧消息向上堆叠；点击左侧 agent 会自动恢复或创建该 agent 的长期主时间线。</p>
+      <p class="empty-tip">点输入框左侧的 + 可上传图片或音频；音频默认转写后发给 agent，同时保留原始文件引用。</p>
     `;
     messageListEl.append(empty);
     return;
@@ -268,32 +299,50 @@ function renderMessages() {
 
 function renderMediaBlock(block) {
   if (block.invalid) {
-    const invalid = document.createElement('div');
-    invalid.className = 'invalid-card';
-    invalid.textContent = block.invalidReason || '文件丢失';
-    return invalid;
+    return createInvalidMediaCard(block.name || block.type || '文件', block.invalidReason || '文件丢失');
   }
 
   if (block.type === 'image') {
+    const wrapper = createMediaCard(block, '图片');
     const image = document.createElement('img');
     image.src = block.url;
     image.alt = block.name || '图片';
     image.loading = 'lazy';
-    return image;
+    keepMessagesPinnedOnMediaLoad(image, 'load');
+    image.addEventListener('error', () => wrapper.replaceWith(createInvalidMediaCard(block.name || '图片', '图片加载失败')));
+    wrapper.append(image);
+    return wrapper;
   }
 
   if (block.type === 'audio') {
+    const wrapper = createMediaCard(block, '音频');
     const audio = document.createElement('audio');
     audio.controls = true;
+    audio.preload = 'metadata';
     audio.src = block.url;
-    return audio;
+    keepMessagesPinnedOnMediaLoad(audio, 'loadedmetadata');
+    audio.addEventListener('error', () => wrapper.replaceWith(createInvalidMediaCard(block.name || '音频', '音频加载失败')));
+    wrapper.append(audio);
+
+    if (block.transcriptStatus === 'ready' && block.transcriptText) {
+      wrapper.append(createMediaNote('转写文本', block.transcriptText));
+    } else if (block.transcriptStatus === 'failed') {
+      wrapper.append(createMediaNote('转写状态', block.transcriptError || '转写失败，已保留原始音频', true));
+    }
+
+    return wrapper;
   }
 
   if (block.type === 'video') {
+    const wrapper = createMediaCard(block, '视频');
     const video = document.createElement('video');
     video.controls = true;
+    video.preload = 'metadata';
     video.src = block.url;
-    return video;
+    keepMessagesPinnedOnMediaLoad(video, 'loadedmetadata');
+    video.addEventListener('error', () => wrapper.replaceWith(createInvalidMediaCard(block.name || '视频', '视频加载失败')));
+    wrapper.append(video);
+    return wrapper;
   }
 
   const link = document.createElement('a');
@@ -303,13 +352,69 @@ function renderMediaBlock(block) {
   link.rel = 'noreferrer';
 
   const title = document.createElement('div');
+  title.className = 'file-title';
   title.textContent = block.name || '文件';
+
   const meta = document.createElement('div');
   meta.className = 'file-meta';
-  meta.textContent = '点击打开';
+  meta.textContent = `点击打开${block.sizeBytes ? ` · ${formatBytes(block.sizeBytes)}` : ''}`;
 
   link.append(title, meta);
   return link;
+}
+
+function createMediaCard(block, label) {
+  const wrapper = document.createElement('article');
+  wrapper.className = `media-card ${block.type}`;
+
+  const header = document.createElement('div');
+  header.className = 'media-card-header';
+
+  const title = document.createElement('div');
+  title.className = 'media-card-title';
+  title.textContent = block.name || label;
+
+  const meta = document.createElement('div');
+  meta.className = 'media-card-meta';
+  meta.textContent = [label, block.sizeBytes ? formatBytes(block.sizeBytes) : '']
+    .filter(Boolean)
+    .join(' · ');
+
+  header.append(title, meta);
+  wrapper.append(header);
+  return wrapper;
+}
+
+function createMediaNote(label, content, warning = false) {
+  const note = document.createElement('div');
+  note.className = `media-note${warning ? ' warning' : ''}`;
+
+  const heading = document.createElement('div');
+  heading.className = 'media-note-label';
+  heading.textContent = label;
+
+  const body = document.createElement('div');
+  body.className = 'media-note-body';
+  body.textContent = content || '';
+
+  note.append(heading, body);
+  return note;
+}
+
+function createInvalidMediaCard(titleText, reasonText) {
+  const invalid = document.createElement('div');
+  invalid.className = 'invalid-card';
+
+  const title = document.createElement('div');
+  title.className = 'file-title';
+  title.textContent = titleText;
+
+  const reason = document.createElement('div');
+  reason.className = 'file-meta';
+  reason.textContent = reasonText;
+
+  invalid.append(title, reason);
+  return invalid;
 }
 
 async function loadOlderHistory() {
@@ -344,7 +449,7 @@ async function handleSendSubmit(event) {
 
   state.sending = true;
   setComposerEnabled(false);
-  showStatus(state.pendingUploads.length ? '正在上传图片并发送…' : '消息发送中…', 'info');
+  showStatus(getSendingStatusMessage(), 'info');
 
   let uploadedBlocks = [];
 
@@ -353,7 +458,7 @@ async function handleSendSubmit(event) {
   } catch (error) {
     state.sending = false;
     setComposerEnabled(true);
-    showStatus(`图片上传失败：${formatError(error)}`, 'error');
+    showStatus(`附件处理失败：${formatError(error)}`, 'error');
     return;
   }
 
@@ -374,7 +479,7 @@ async function handleSendSubmit(event) {
     });
     if (response?.message) state.messages.push(response.message);
     composerInputEl.value = '';
-    imageUploadInputEl.value = '';
+    mediaUploadInputEl.value = '';
     autoResizeComposer();
     clearPendingUploads();
     renderMessages();
@@ -393,32 +498,38 @@ async function handleSendSubmit(event) {
   }
 }
 
-async function handleImageSelection(event) {
+async function handleFileSelection(event) {
   const files = Array.from(event.target.files || []);
   if (!files.length) return;
 
   const additions = [];
   for (const file of files) {
-    if (!String(file.type || '').startsWith('image/')) {
-      showStatus(`仅支持图片上传：${file.name}`, 'error');
+    const kind = detectAttachmentKind(file);
+    if (!kind) {
+      showStatus(`仅支持图片或音频上传：${file.name}`, 'error');
       continue;
     }
 
     additions.push({
       id: `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       file,
-      kind: 'image',
+      kind,
       name: file.name,
-      mimeType: file.type || 'image/png',
-      previewUrl: URL.createObjectURL(file),
+      mimeType: file.type || (kind === 'audio' ? 'audio/m4a' : 'image/png'),
+      previewUrl: kind === 'image' ? URL.createObjectURL(file) : null,
       source: null,
-      uploadedUrl: null
+      uploadedUrl: null,
+      transcriptStatus: null,
+      transcriptText: null,
+      transcriptError: null,
+      sizeBytes: file.size || null
     });
   }
 
   state.pendingUploads.push(...additions);
   renderPendingUploads();
   event.target.value = '';
+  scrollMessagesToBottom();
 }
 
 async function handleNewContext() {
@@ -444,36 +555,12 @@ async function handleNewContext() {
 }
 
 function updateHeader() {
-  const active = state.agents.find((item) => item.agentId === state.activeAgentId) || null;
+  const active = getActiveAgent();
   chatTitleEl.textContent = active?.name || 'openclaw-webchat';
   chatSubtitleEl.textContent = active
     ? `${active.hasSession ? '长期主时间线' : '点击后自动创建'} · ${active.summary || '暂无摘要'}`
     : '选择 agent 开始聊天';
   headerPresenceEl.className = `presence-dot ${normalizePresence(active?.presence || 'idle')}`;
-}
-
-async function openSettingsQuickEditor() {
-  const currentName = state.userProfile.displayName || '我';
-  const currentAvatar = state.userProfile.avatarUrl || '';
-  const displayName = window.prompt('设置你的显示名：', currentName);
-  if (displayName === null) return;
-  const avatarUrl = window.prompt('设置你的头像 URL（留空则清除）：', currentAvatar);
-  if (avatarUrl === null) return;
-
-  try {
-    const payload = await apiPatch('/api/openclaw-webchat/settings/user-profile', {
-      displayName: displayName.trim() || '我',
-      avatarUrl: avatarUrl.trim() || null
-    });
-    state.userProfile = {
-      displayName: payload?.userProfile?.displayName || '我',
-      avatarUrl: payload?.userProfile?.avatarUrl || null
-    };
-    renderMessages();
-    showStatus('你的头像设置已保存。', 'success');
-  } catch (error) {
-    showStatus(`保存头像设置失败：${formatError(error)}`, 'error');
-  }
 }
 
 function createAvatarElement({ className, avatarUrl, label, fallbackText }) {
@@ -483,11 +570,34 @@ function createAvatarElement({ className, avatarUrl, label, fallbackText }) {
     const image = document.createElement('img');
     image.src = avatarUrl;
     image.alt = label || fallbackText || 'avatar';
+    image.addEventListener('error', () => {
+      avatar.innerHTML = '';
+      avatar.textContent = fallbackText || (label || '?').slice(0, 1).toUpperCase();
+    }, { once: true });
     avatar.append(image);
   } else {
     avatar.textContent = fallbackText || (label || '?').slice(0, 1).toUpperCase();
   }
   return avatar;
+}
+
+function createMessageAvatar(role) {
+  if (role === 'user') {
+    return createAvatarElement({
+      className: 'message-avatar user',
+      avatarUrl: state.userProfile.avatarUrl,
+      label: state.userProfile.displayName || '我',
+      fallbackText: (state.userProfile.displayName || '我').slice(0, 1)
+    });
+  }
+
+  const active = getActiveAgent();
+  return createAvatarElement({
+    className: 'message-avatar assistant',
+    avatarUrl: active?.avatarUrl,
+    label: active?.name || active?.agentId || 'A',
+    fallbackText: (active?.name || active?.agentId || 'A').slice(0, 1).toUpperCase()
+  });
 }
 
 function renderPendingUploads() {
@@ -496,23 +606,22 @@ function renderPendingUploads() {
 
   for (const attachment of state.pendingUploads) {
     const item = document.createElement('div');
-    item.className = 'pending-upload';
+    item.className = `pending-upload ${attachment.kind}`;
 
-    const preview = document.createElement('img');
-    preview.className = 'pending-upload-preview';
-    preview.src = attachment.previewUrl || attachment.uploadedUrl || '';
-    preview.alt = attachment.name || '图片预览';
+    const preview = attachment.kind === 'image'
+      ? createPendingImagePreview(attachment)
+      : createPendingAudioPreview();
 
     const meta = document.createElement('div');
     meta.className = 'pending-upload-meta';
 
     const title = document.createElement('div');
     title.className = 'pending-upload-name';
-    title.textContent = attachment.name || '未命名图片';
+    title.textContent = attachment.name || (attachment.kind === 'audio' ? '未命名音频' : '未命名图片');
 
     const subtitle = document.createElement('div');
     subtitle.className = 'pending-upload-hint';
-    subtitle.textContent = attachment.source ? '已就绪，发送时会一并带上' : '发送时自动上传';
+    subtitle.textContent = buildPendingUploadHint(attachment);
 
     const remove = document.createElement('button');
     remove.type = 'button';
@@ -525,6 +634,36 @@ function renderPendingUploads() {
     item.append(preview, meta, remove);
     pendingUploadsEl.append(item);
   }
+}
+
+function createPendingImagePreview(attachment) {
+  const preview = document.createElement('img');
+  preview.className = 'pending-upload-preview';
+  preview.src = attachment.previewUrl || attachment.uploadedUrl || '';
+  preview.alt = attachment.name || '图片预览';
+  return preview;
+}
+
+function createPendingAudioPreview() {
+  const badge = document.createElement('div');
+  badge.className = 'pending-upload-audio';
+  badge.textContent = '音频';
+  return badge;
+}
+
+function buildPendingUploadHint(attachment) {
+  if (attachment.kind === 'image') {
+    return attachment.source ? '已就绪，发送时会一并带上' : '发送时自动上传';
+  }
+
+  if (!attachment.source) return '发送时自动上传并转写';
+  if (attachment.transcriptStatus === 'ready' && attachment.transcriptText) {
+    return `转写完成 · ${summarizeText(attachment.transcriptText, 32)}`;
+  }
+  if (attachment.transcriptStatus === 'failed') {
+    return attachment.transcriptError || '转写失败，仍会发送原音频';
+  }
+  return '已就绪，发送时会一并带上';
 }
 
 function removePendingUpload(uploadId) {
@@ -555,33 +694,53 @@ async function ensurePendingUploadsReady() {
     const attachment = state.pendingUploads[index];
 
     if (!attachment.source) {
-      showStatus(`正在上传图片 ${index + 1}/${state.pendingUploads.length}…`, 'info');
-      const payload = await uploadPendingImage(attachment);
+      showStatus(buildUploadProgressMessage(attachment, index), 'info');
+      const payload = await uploadPendingAttachment(attachment);
       attachment.source = payload?.upload?.source || null;
       attachment.uploadedUrl = payload?.block?.url || null;
+      attachment.transcriptStatus = payload?.upload?.transcriptStatus || null;
+      attachment.transcriptText = payload?.upload?.transcriptText || null;
+      attachment.transcriptError = payload?.upload?.transcriptError || null;
+      attachment.sizeBytes = payload?.upload?.size || attachment.sizeBytes;
       if (!attachment.source) {
-        throw new Error(`上传失败：${attachment.name || '图片'}`);
+        throw new Error(`上传失败：${attachment.name || '附件'}`);
       }
     }
 
-    blocks.push({
-      type: attachment.kind,
-      source: attachment.source,
-      name: attachment.name
-    });
+    blocks.push(...buildSendBlocksForAttachment(attachment));
   }
 
   return blocks;
 }
 
-async function uploadPendingImage(attachment) {
+function buildUploadProgressMessage(attachment, index) {
+  if (attachment.kind === 'audio') {
+    return `正在上传并转写音频 ${index + 1}/${state.pendingUploads.length}…`;
+  }
+  return `正在上传图片 ${index + 1}/${state.pendingUploads.length}…`;
+}
+
+async function uploadPendingAttachment(attachment) {
   const contentBase64 = await readFileAsBase64(attachment.file);
   return apiPost('/api/openclaw-webchat/uploads', {
-    kind: 'image',
+    kind: attachment.kind,
     filename: attachment.name,
     mimeType: attachment.mimeType,
     contentBase64
   });
+}
+
+function buildSendBlocksForAttachment(attachment) {
+  return [{
+    type: attachment.kind,
+    source: attachment.source,
+    name: attachment.name,
+    mimeType: attachment.mimeType,
+    sizeBytes: attachment.sizeBytes,
+    transcriptStatus: attachment.transcriptStatus,
+    transcriptText: attachment.transcriptText,
+    transcriptError: attachment.transcriptError
+  }];
 }
 
 function buildOptimisticBlocks(text, attachments) {
@@ -594,7 +753,11 @@ function buildOptimisticBlocks(text, attachments) {
     blocks.push({
       type: attachment.kind,
       url: attachment.uploadedUrl || attachment.previewUrl || '',
-      name: attachment.name
+      name: attachment.name,
+      sizeBytes: attachment.sizeBytes,
+      transcriptStatus: attachment.transcriptStatus,
+      transcriptText: attachment.transcriptText,
+      transcriptError: attachment.transcriptError
     });
   }
 
@@ -618,23 +781,135 @@ function readFileAsBase64(file) {
   });
 }
 
-function createMessageAvatar(role) {
-  if (role === 'user') {
-    return createAvatarElement({
-      className: 'message-avatar user',
-      avatarUrl: state.userProfile.avatarUrl,
-      label: state.userProfile.displayName || '我',
-      fallbackText: (state.userProfile.displayName || '我').slice(0, 1)
-    });
+function detectAttachmentKind(file) {
+  const mimeType = String(file?.type || '').toLowerCase();
+  if (mimeType.startsWith('image/')) return 'image';
+  if (mimeType.startsWith('audio/')) return 'audio';
+
+  const filename = String(file?.name || '').toLowerCase();
+  if (/\.(png|jpe?g|gif|webp|bmp|svg|heic|heif|avif)$/i.test(filename)) return 'image';
+  if (/\.(m4a|mp3|wav|aac|ogg|opus|flac|webm)$/i.test(filename)) return 'audio';
+  return null;
+}
+
+function toggleSettingsPanel(open) {
+  state.settingsOpen = Boolean(open);
+  appShellEl.classList.toggle('settings-open', state.settingsOpen);
+  settingsPanelEl.setAttribute('aria-hidden', state.settingsOpen ? 'false' : 'true');
+  if (state.settingsOpen) populateSettingsForm();
+}
+
+function populateSettingsForm() {
+  userDisplayNameInputEl.value = state.userProfile.displayName || '我';
+  userAvatarUrlInputEl.value = state.userProfile.avatarUrl || '';
+
+  const active = getActiveAgent();
+  agentDisplayNameInputEl.value = active?.name || '';
+  agentAvatarUrlInputEl.value = active?.avatarUrl || '';
+  agentDisplayNameInputEl.disabled = !active;
+  agentAvatarUrlInputEl.disabled = !active;
+  saveAgentSettingsButtonEl.disabled = !active;
+  agentSettingsHintEl.textContent = active
+    ? `当前正在编辑 ${active.agentId} 的页面显示，不影响上游 agent 本体。`
+    : '选择左侧 agent 后，可在这里改本页面显示名和头像。';
+  renderSettingsPreview();
+}
+
+function renderSettingsPreview() {
+  const userName = userDisplayNameInputEl.value.trim() || '我';
+  const userAvatar = userAvatarUrlInputEl.value.trim() || null;
+  renderAvatarPreview(userAvatarPreviewEl, userAvatar, userName);
+  userPreviewSubtitleEl.textContent = `右侧气泡显示为 ${userName}`;
+
+  const active = getActiveAgent();
+  const agentName = agentDisplayNameInputEl.value.trim() || active?.name || '尚未选择 agent';
+  const agentAvatar = agentAvatarUrlInputEl.value.trim() || active?.avatarUrl || null;
+  renderAvatarPreview(agentAvatarPreviewEl, agentAvatar, agentName);
+  agentPreviewTitleEl.textContent = agentName;
+  agentPreviewSubtitleEl.textContent = active
+    ? `将覆盖 ${active.agentId} 在列表、标题和消息中的显示`
+    : '左侧列表、顶部标题和消息头像会同步更新';
+}
+
+function renderAvatarPreview(element, avatarUrl, label) {
+  element.innerHTML = '';
+  element.textContent = '';
+  element.classList.toggle('has-image', Boolean(avatarUrl));
+
+  if (avatarUrl) {
+    const image = document.createElement('img');
+    image.src = avatarUrl;
+    image.alt = label || 'avatar';
+    image.addEventListener('error', () => {
+      element.classList.remove('has-image');
+      element.innerHTML = '';
+      element.textContent = (label || '?').slice(0, 1).toUpperCase();
+    }, { once: true });
+    element.append(image);
+    return;
   }
 
-  const active = state.agents.find((item) => item.agentId === state.activeAgentId) || null;
-  return createAvatarElement({
-    className: 'message-avatar assistant',
-    avatarUrl: active?.avatarUrl,
-    label: active?.name || active?.agentId || 'A',
-    fallbackText: (active?.name || active?.agentId || 'A').slice(0, 1).toUpperCase()
-  });
+  element.textContent = (label || '?').slice(0, 1).toUpperCase();
+}
+
+async function saveUserSettings() {
+  try {
+    const payload = await apiPatch('/api/openclaw-webchat/settings/user-profile', {
+      displayName: userDisplayNameInputEl.value.trim() || '我',
+      avatarUrl: userAvatarUrlInputEl.value.trim() || null
+    });
+    state.userProfile = {
+      displayName: payload?.userProfile?.displayName || '我',
+      avatarUrl: payload?.userProfile?.avatarUrl || null
+    };
+    populateSettingsForm();
+    renderMessages();
+    showStatus('我的显示设置已保存。', 'success');
+  } catch (error) {
+    showStatus(`保存失败：${formatError(error)}`, 'error');
+  }
+}
+
+async function saveAgentSettings() {
+  const active = getActiveAgent();
+  if (!active) return;
+
+  try {
+    const payload = await apiPatch(`/api/openclaw-webchat/agents/${encodeURIComponent(active.agentId)}/profile`, {
+      displayName: agentDisplayNameInputEl.value.trim() || null,
+      avatarUrl: agentAvatarUrlInputEl.value.trim() || null
+    });
+
+    updateLocalAgentProfile(active.agentId, {
+      name: payload?.profile?.displayName || active.agentId,
+      avatarUrl: payload?.profile?.avatarUrl || null
+    });
+    renderAgentList();
+    updateHeader();
+    populateSettingsForm();
+    renderMessages();
+    showStatus('当前 agent 显示已保存。', 'success');
+  } catch (error) {
+    showStatus(`保存失败：${formatError(error)}`, 'error');
+  }
+}
+
+function updateLocalAgentProfile(agentId, patch) {
+  state.agents = state.agents.map((agent) => (
+    agent.agentId === agentId
+      ? { ...agent, ...patch }
+      : agent
+  ));
+}
+
+function getActiveAgent() {
+  return state.agents.find((item) => item.agentId === state.activeAgentId) || null;
+}
+
+function getSendingStatusMessage() {
+  if (!state.pendingUploads.length) return '消息发送中…';
+  if (state.pendingUploads.some((item) => item.kind === 'audio')) return '正在处理附件并发送…';
+  return '正在上传附件并发送…';
 }
 
 function showStatus(message, tone = 'info') {
@@ -643,9 +918,31 @@ function showStatus(message, tone = 'info') {
 }
 
 function scrollMessagesToBottom() {
+  const applyScroll = () => {
+    messageListEl.scrollTo({
+      top: messageListEl.scrollHeight,
+      behavior: 'auto'
+    });
+  };
+
+  applyScroll();
   requestAnimationFrame(() => {
-    messageListEl.scrollTop = messageListEl.scrollHeight;
+    applyScroll();
+    requestAnimationFrame(applyScroll);
   });
+}
+
+function keepMessagesPinnedOnMediaLoad(element, eventName) {
+  const shouldStickToBottom = isNearBottom();
+  element.addEventListener(eventName, () => {
+    if (!shouldStickToBottom && !isNearBottom()) return;
+    scrollMessagesToBottom();
+  }, { once: true });
+}
+
+function isNearBottom() {
+  const remaining = messageListEl.scrollHeight - messageListEl.clientHeight - messageListEl.scrollTop;
+  return remaining < 96;
 }
 
 function autoResizeComposer() {
@@ -657,8 +954,8 @@ function setComposerEnabled(enabled) {
   composerInputEl.disabled = !enabled;
   sendButtonEl.disabled = !enabled;
   newContextButtonEl.disabled = !enabled;
-  attachImageButtonEl.disabled = !enabled;
-  imageUploadInputEl.disabled = !enabled;
+  attachButtonEl.disabled = !enabled;
+  mediaUploadInputEl.disabled = !enabled;
   renderPendingUploads();
 }
 
@@ -735,6 +1032,20 @@ function formatTime(value) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return '';
   return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatBytes(value) {
+  const size = Number(value) || 0;
+  if (!size) return '';
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function summarizeText(text, maxLength = 48) {
+  const singleLine = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!singleLine) return '';
+  return singleLine.length > maxLength ? `${singleLine.slice(0, maxLength - 1)}…` : singleLine;
 }
 
 function formatError(error) {

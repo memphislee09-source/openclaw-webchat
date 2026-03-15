@@ -8,8 +8,10 @@ await checkHealth();
 await checkPageShell();
 await checkSettings();
 await checkAgents();
+await checkAgentProfile();
 await checkOpenAgent();
 await checkUpload();
+await checkAudioUpload();
 await checkSend();
 await checkReset();
 await checkHistory();
@@ -26,14 +28,18 @@ async function checkPageShell() {
   assert(html.includes('id="agentList"'), 'page should contain agentList');
   assert(html.includes('id="messageList"'), 'page should contain messageList');
   assert(html.includes('id="composerInput"'), 'page should contain composerInput');
-  assert(html.includes('id="attachImageButton"'), 'page should contain attachImageButton');
+  assert(html.includes('id="attachButton"'), 'page should contain attachButton');
+  assert(html.includes('id="mediaUploadInput"'), 'page should contain mediaUploadInput');
+  assert(html.includes('id="settingsPanel"'), 'page should contain settingsPanel');
 
   const appJs = await getText('/static/app.js');
   const css = await getText('/static/styles.css');
   assert(appJs.includes('async function openAgent'), 'app.js should include openAgent');
   assert(appJs.includes('async function ensurePendingUploadsReady'), 'app.js should include image upload flow');
+  assert(appJs.includes('async function saveAgentSettings'), 'app.js should include visual agent settings');
   assert(css.includes('.agent-card'), 'styles.css should include agent-card styles');
   assert(css.includes('.pending-upload'), 'styles.css should include pending upload styles');
+  assert(css.includes('.settings-panel'), 'styles.css should include settings panel styles');
 }
 
 async function checkSettings() {
@@ -62,10 +68,34 @@ async function checkUpload() {
   assert(mediaResponse.ok, 'uploaded media url should be readable');
 }
 
+async function checkAudioUpload() {
+  const payload = await postJson('/api/openclaw-webchat/uploads', {
+    kind: 'audio',
+    filename: 'tiny.wav',
+    mimeType: 'audio/wav',
+    transcribe: false,
+    contentBase64: 'UklGRmQGAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YUAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+  });
+  assert(payload?.ok === true, 'audio upload should return ok=true');
+  assert(payload?.upload?.source, 'audio upload should return stored source');
+  assert(payload?.block?.type === 'audio', 'audio upload should return audio block');
+  assert((payload?.upload?.transcriptStatus ?? null) === null, 'audio upload selftest should skip transcription');
+  const mediaResponse = await fetch(`${base}${payload.block.url}`);
+  assert(mediaResponse.ok, 'uploaded audio url should be readable');
+}
+
 async function checkAgents() {
   const payload = await getJson('/api/openclaw-webchat/agents');
   assert(Array.isArray(payload?.agents), 'agents endpoint should return array');
   assert(payload.agents.some((item) => item.agentId === agentId), `agents should include ${agentId}`);
+}
+
+async function checkAgentProfile() {
+  const patched = await patchJson(`/api/openclaw-webchat/agents/${encodeURIComponent(agentId)}/profile`, {
+    displayName: 'Selftest Agent',
+    avatarUrl: null
+  });
+  assert(patched?.profile?.displayName === 'Selftest Agent', 'agent profile patch should persist displayName');
 }
 
 async function checkOpenAgent() {

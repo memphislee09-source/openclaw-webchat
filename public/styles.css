@@ -14,7 +14,7 @@
   --success-soft: rgba(34, 197, 94, 0.16);
   --danger: #ef4444;
   --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
-  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "Avenir Next", "PingFang SC", "Noto Sans SC", "Helvetica Neue", sans-serif;
 }
 
 * {
@@ -25,8 +25,10 @@ html,
 body {
   margin: 0;
   min-height: 100%;
+  height: 100%;
   background: radial-gradient(circle at top, #18213f 0%, #0b1020 55%);
   color: var(--text);
+  overflow: hidden;
 }
 
 body {
@@ -34,7 +36,8 @@ body {
 }
 
 button,
-textarea {
+textarea,
+input {
   font: inherit;
 }
 
@@ -44,8 +47,10 @@ button {
 
 .app-shell {
   min-height: 100vh;
+  height: 100vh;
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .sidebar {
@@ -56,13 +61,16 @@ button {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  min-height: 100vh;
+  min-height: 0;
+  height: 100vh;
+  overflow: hidden;
   position: relative;
   z-index: 4;
 }
 
 .sidebar-header,
-.chat-header {
+.chat-header,
+.settings-panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -75,21 +83,35 @@ button {
 .empty-tip,
 .message-time,
 .file-meta,
-.chat-status {
+.chat-status,
+.settings-section-copy,
+.media-card-meta,
+.settings-preview-subtitle {
   color: var(--muted);
 }
 
 .eyebrow,
-.sidebar-caption {
+.sidebar-caption,
+.settings-section-title,
+.media-note-label {
   text-transform: uppercase;
   font-size: 12px;
   letter-spacing: 0.08em;
 }
 
 .sidebar h1,
-.chat-title-row h2 {
+.chat-title-row h2,
+.settings-panel-header h3 {
   margin: 0;
+}
+
+.sidebar h1,
+.chat-title-row h2 {
   font-size: 22px;
+}
+
+.settings-panel-header h3 {
+  font-size: 24px;
 }
 
 .sidebar-search-row {
@@ -133,30 +155,30 @@ button {
   background: rgba(59, 130, 246, 0.12);
 }
 
+.agent-avatar,
+.settings-avatar-preview {
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
 .agent-avatar {
   grid-row: 1 / span 2;
   width: 48px;
   height: 48px;
   border-radius: 16px;
   background: linear-gradient(135deg, rgba(59, 130, 246, 0.8), rgba(99, 102, 241, 0.8));
-  display: grid;
-  place-items: center;
   font-weight: 700;
   font-size: 18px;
-  overflow: hidden;
 }
 
-.agent-avatar img {
+.agent-avatar img,
+.settings-avatar-preview img,
+.message-avatar img,
+.pending-upload-preview {
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-
-.agent-name-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
 }
 
 .agent-name {
@@ -165,6 +187,13 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.agent-top-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .agent-summary {
@@ -203,7 +232,8 @@ button {
 .settings-entry,
 .ghost-button,
 .primary-button,
-.icon-button {
+.icon-button,
+.settings-field input {
   border-radius: 14px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.04);
@@ -232,6 +262,12 @@ button {
   padding: 0;
 }
 
+.attach-button {
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 500;
+}
+
 .primary-button {
   background: linear-gradient(135deg, var(--brand), var(--brand-2));
   border-color: transparent;
@@ -239,16 +275,19 @@ button {
 
 .primary-button:disabled,
 .ghost-button:disabled,
-.icon-button:disabled {
+.icon-button:disabled,
+.pending-upload-remove:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
 
 .chat-layout {
   min-width: 0;
-  min-height: 100vh;
+  min-height: 0;
+  height: 100vh;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .chat-header {
@@ -265,7 +304,10 @@ button {
 .chat-title-row,
 .chat-header-actions,
 .composer-actions,
-.pending-upload {
+.pending-upload,
+.settings-preview-row,
+.settings-actions,
+.media-card-header {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -275,6 +317,7 @@ button {
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
 }
 
 .chat-status {
@@ -289,8 +332,10 @@ button {
   padding: 12px 24px 24px;
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
   gap: 16px;
   scroll-behavior: smooth;
+  overscroll-behavior: contain;
 }
 
 .empty-state {
@@ -304,19 +349,45 @@ button {
 
 .message-row {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: flex-start;
   gap: 6px;
   max-width: min(860px, 100%);
 }
 
 .message-row.user {
   align-self: flex-end;
-  align-items: flex-end;
+  flex-direction: row-reverse;
 }
 
 .message-row.assistant {
   align-self: flex-start;
-  align-items: flex-start;
+}
+
+.message-body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.message-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 700;
+  border: 1px solid var(--line);
+}
+
+.message-avatar.assistant {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.26), rgba(59, 130, 246, 0.24));
+}
+
+.message-avatar.user {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.28), rgba(37, 99, 235, 0.24));
 }
 
 .message-bubble {
@@ -363,6 +434,53 @@ button {
   width: min(420px, 100%);
 }
 
+.media-card {
+  display: grid;
+  gap: 10px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 12px;
+}
+
+.media-card-header {
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.media-card-title,
+.file-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.media-card-meta,
+.file-meta {
+  font-size: 12px;
+}
+
+.media-note {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 10px 12px;
+}
+
+.media-note.warning {
+  border-color: rgba(239, 68, 68, 0.24);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.media-note-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.6;
+  color: var(--text-soft);
+}
+
 .file-card,
 .invalid-card,
 .marker-chip,
@@ -378,6 +496,11 @@ button {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.file-card {
+  text-decoration: none;
+  color: inherit;
 }
 
 .invalid-card {
@@ -429,7 +552,7 @@ button {
 
 .pending-upload {
   min-width: 0;
-  max-width: min(100%, 280px);
+  max-width: min(100%, 300px);
   padding: 10px;
   border-radius: 18px;
   border: 1px solid var(--line);
@@ -439,16 +562,37 @@ button {
   box-shadow: var(--shadow);
 }
 
-.pending-upload-preview {
+.pending-upload.audio {
+  background:
+    linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(59, 130, 246, 0.05)),
+    rgba(255, 255, 255, 0.03);
+}
+
+.pending-upload-preview,
+.pending-upload-audio {
   width: 48px;
   height: 48px;
   border-radius: 14px;
-  object-fit: cover;
   flex: none;
+}
+
+.pending-upload-preview {
   border: 1px solid var(--line);
 }
 
-.pending-upload-meta {
+.pending-upload-audio {
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #d1fae5;
+  border: 1px solid rgba(16, 185, 129, 0.24);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.28), rgba(6, 182, 212, 0.18));
+}
+
+.pending-upload-meta,
+.settings-preview-copy {
   min-width: 0;
   flex: 1;
 }
@@ -460,7 +604,8 @@ button {
   white-space: nowrap;
 }
 
-.pending-upload-name {
+.pending-upload-name,
+.settings-preview-label {
   font-size: 14px;
   color: var(--text);
 }
@@ -490,19 +635,122 @@ button {
   line-height: 1.5;
 }
 
-.composer textarea:focus {
+.composer textarea:focus,
+.settings-field input:focus {
   outline: 1px solid rgba(59, 130, 246, 0.7);
   border-color: rgba(59, 130, 246, 0.45);
 }
 
-.sidebar-backdrop {
+.sidebar-backdrop,
+.settings-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
   opacity: 0;
   pointer-events: none;
   transition: opacity 180ms ease;
+}
+
+.sidebar-backdrop {
+  background: rgba(0, 0, 0, 0.45);
   z-index: 2;
+}
+
+.settings-backdrop {
+  background: rgba(3, 6, 14, 0.58);
+  z-index: 4;
+}
+
+.settings-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(440px, 100vw);
+  background:
+    linear-gradient(180deg, rgba(17, 24, 39, 0.98), rgba(10, 15, 28, 0.98)),
+    rgba(15, 23, 42, 0.96);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  transform: translateX(100%);
+  transition: transform 220ms ease;
+  z-index: 5;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.app-shell.settings-open .settings-backdrop {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.app-shell.settings-open .settings-panel {
+  transform: translateX(0);
+}
+
+.settings-panel-header {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-panel-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 20px 24px;
+  display: grid;
+  gap: 18px;
+}
+
+.settings-section {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-section-copy {
+  margin: 0;
+  line-height: 1.6;
+  font-size: 13px;
+}
+
+.settings-card {
+  border-radius: 24px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.settings-avatar-preview {
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.75), rgba(244, 114, 182, 0.55));
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.settings-avatar-preview.agent {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.72), rgba(59, 130, 246, 0.72));
+}
+
+.settings-field {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-field span {
+  font-size: 13px;
+  color: var(--text-soft);
+}
+
+.settings-field input {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 14px;
+}
+
+.settings-actions {
+  justify-content: flex-end;
 }
 
 .mobile-only {
@@ -541,6 +789,10 @@ button {
   .mobile-only {
     display: inline-grid;
   }
+
+  .settings-panel {
+    width: min(92vw, 440px);
+  }
 }
 
 @media (max-width: 640px) {
@@ -558,9 +810,32 @@ button {
 
   .composer-actions {
     justify-content: space-between;
+    flex-wrap: wrap;
   }
 
   .pending-upload {
     max-width: 100%;
+  }
+
+  .settings-panel {
+    width: 100vw;
+  }
+
+  .settings-panel-header,
+  .settings-panel-body {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .settings-preview-row {
+    align-items: flex-start;
+  }
+
+  .settings-actions {
+    justify-content: stretch;
+  }
+
+  .settings-actions .primary-button {
+    width: 100%;
   }
 }
