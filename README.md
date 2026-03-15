@@ -6,14 +6,19 @@ OpenClaw WebChat 项目仓库。
 构建可扩展、可维护的 WebChat 客户端，为 OpenClaw 提供稳定的对话交互体验。
 
 ## 当前阶段
-- 阶段：Phase 1 已完成（服务端最小闭环）
-- 当前重点：前端 MVP（agent 列表、聊天主区、无限上拉、移动端抽屉）
+- 阶段：Phase 2 已完成（前端 MVP + 服务端最小闭环）
+- 当前重点：Phase 3 富媒体上传与设置能力完善
 
 ## 本地运行
 ```bash
 npm install
 npm start
 # 默认监听 http://localhost:3770
+```
+
+## 自测
+```bash
+npm run selftest
 ```
 
 ## 当前已完成能力
@@ -25,6 +30,9 @@ npm start
 - assistant 最终回复提取
 - 结构化媒体块 + `MEDIA:` / `mediaUrl:` fallback 解析
 - 本地媒体代理与“文件丢失”兜底
+- 左侧 agent 列表 + 主聊天区 + 输入区
+- 历史渲染与无限上拉分页
+- 移动端抽屉布局
 
 ## 仓库结构
 - `status.md`：项目状态与里程碑（开工前先读）

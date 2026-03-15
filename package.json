@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "check": "node --check src/server.js"
+    "check": "node --check src/server.js",
+    "selftest": "node scripts/selftest.mjs"
   },
   "dependencies": {
     "express": "^4.21.2"
