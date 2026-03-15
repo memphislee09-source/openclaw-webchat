@@ -233,7 +233,8 @@ button {
 .ghost-button,
 .primary-button,
 .icon-button,
-.settings-field input {
+.settings-field input,
+.settings-field select {
   border-radius: 14px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.04);
@@ -371,13 +372,13 @@ button {
 }
 
 .message-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 14px;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
   display: grid;
   place-items: center;
   overflow: hidden;
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 700;
   border: 1px solid var(--line);
 }
@@ -539,7 +540,45 @@ button {
 
 .loading-chip {
   align-self: flex-start;
-  margin-left: 46px;
+  margin-left: 58px;
+}
+
+.message-row.processing {
+  align-items: center;
+}
+
+.processing-indicator {
+  min-height: 48px;
+  min-width: 82px;
+  padding: 0 18px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: var(--shadow);
+}
+
+.processing-indicator-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.95), rgba(59, 130, 246, 0.95));
+  animation: processing-pulse 1s ease-in-out infinite;
+}
+
+@keyframes processing-pulse {
+  0%, 80%, 100% {
+    transform: translateY(0) scale(0.78);
+    opacity: 0.38;
+  }
+
+  40% {
+    transform: translateY(-6px) scale(1);
+    opacity: 1;
+  }
 }
 
 .composer-wrap {
@@ -653,7 +692,8 @@ button {
 }
 
 .composer textarea:focus,
-.settings-field input:focus {
+.settings-field input:focus,
+.settings-field select:focus {
   outline: 1px solid rgba(59, 130, 246, 0.7);
   border-color: rgba(59, 130, 246, 0.45);
 }
@@ -763,8 +803,53 @@ button {
   min-height: 0;
   overflow: auto;
   padding: 18px 20px 24px;
+}
+
+.settings-accordion {
   display: grid;
-  gap: 18px;
+  gap: 12px;
+}
+
+.settings-accordion-item {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-accordion-button {
+  width: 100%;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  padding: 14px 16px;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: 180ms ease;
+}
+
+.settings-accordion-button.active {
+  color: var(--text);
+  background: rgba(59, 130, 246, 0.14);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.settings-accordion-chevron {
+  font-size: 14px;
+  transition: transform 180ms ease;
+}
+
+.settings-accordion-button.active .settings-accordion-chevron {
+  transform: rotate(180deg);
+}
+
+.settings-accordion-panel {
+  display: grid;
+}
+
+.settings-accordion-panel[hidden] {
+  display: none;
 }
 
 .settings-section {
@@ -785,6 +870,10 @@ button {
   padding: 18px;
   display: grid;
   gap: 14px;
+}
+
+.settings-card-muted {
+  opacity: 0.82;
 }
 
 .settings-avatar-preview {
@@ -814,6 +903,25 @@ button {
   width: 100%;
   min-height: 46px;
   padding: 0 14px;
+}
+
+.settings-field select {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 14px;
+  appearance: none;
+}
+
+.settings-avatar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.settings-field-hint {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
 }
 
 .settings-actions {
@@ -860,6 +968,7 @@ button {
   .settings-panel {
     width: min(92vw, 440px);
   }
+
 }
 
 @media (max-width: 640px) {
@@ -903,6 +1012,10 @@ button {
   }
 
   .settings-actions .primary-button {
+    width: 100%;
+  }
+
+  .settings-avatar-actions .ghost-button {
     width: 100%;
   }
 }

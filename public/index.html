@@ -19,7 +19,6 @@
 
         <div class="sidebar-search-row">
           <button class="icon-button desktop-hidden" id="refreshAgentsButton" aria-label="刷新">↻</button>
-          <div class="sidebar-caption">Agents</div>
         </div>
 
         <div class="agent-list" id="agentList"></div>
@@ -84,68 +83,94 @@
       <aside class="settings-panel" id="settingsPanel" aria-hidden="true">
         <div class="settings-panel-header">
           <div>
-            <div class="eyebrow">Display Settings</div>
-            <h3>显示设置</h3>
+            <div class="eyebrow">Workspace Settings</div>
+            <h3>设置</h3>
           </div>
           <button class="icon-button" id="closeSettingsButton" type="button" aria-label="关闭设置">✕</button>
         </div>
 
         <div class="settings-panel-body">
-          <section class="settings-section">
-            <div class="settings-section-title">我的显示</div>
-            <p class="settings-section-copy">只影响本页面里的用户名和头像，不会改动上游身份。</p>
-            <div class="settings-card">
-              <div class="settings-preview-row">
-                <div class="settings-avatar-preview" id="userAvatarPreview"></div>
-                <div class="settings-preview-copy">
-                  <div class="settings-preview-label">消息区里的“我”</div>
-                  <div class="settings-preview-subtitle" id="userPreviewSubtitle">用于右侧气泡与输入区身份展示</div>
+          <div class="settings-accordion">
+            <section class="settings-accordion-item">
+              <button class="settings-accordion-button" id="settingsContactsTab" type="button" data-settings-tab="contacts" aria-expanded="false">
+                <span>联系人</span>
+                <span class="settings-accordion-chevron">⌄</span>
+              </button>
+
+              <div class="settings-accordion-panel" id="settingsContactsSection" data-settings-panel="contacts" hidden>
+                <div class="settings-section">
+                  <div class="settings-section-title">联系人</div>
+                  <p class="settings-section-copy">统一管理用户自己和所有 agent 的显示名称与头像。头像选择本地图片后会自动裁成正方形，点击保存后才生效。</p>
+
+                  <div class="settings-card">
+                    <div class="settings-preview-row">
+                      <div class="settings-avatar-preview" id="settingsAvatarPreview"></div>
+                      <div class="settings-preview-copy">
+                        <div class="settings-preview-label" id="settingsPreviewTitle">联系人预览</div>
+                        <div class="settings-preview-subtitle" id="settingsPreviewSubtitle">左栏、顶部标题和消息头像会同步更新</div>
+                      </div>
+                    </div>
+
+                    <label class="settings-field">
+                      <span>联系人</span>
+                      <select id="settingsContactSelect"></select>
+                    </label>
+
+                    <label class="settings-field">
+                      <span>显示名称</span>
+                      <input id="settingsDisplayNameInput" type="text" maxlength="60" placeholder="输入显示名称" />
+                    </label>
+
+                    <div class="settings-field">
+                      <span>头像</span>
+                      <input id="settingsAvatarFileInput" type="file" accept="image/*" hidden />
+                      <div class="settings-avatar-actions">
+                        <button class="ghost-button" id="settingsChooseAvatarButton" type="button">选择本地图片</button>
+                        <button class="ghost-button" id="settingsClearAvatarButton" type="button">清除头像</button>
+                      </div>
+                      <div class="settings-field-hint" id="settingsAvatarHint">支持本地图片，保存时自动裁成正方形并上传。</div>
+                    </div>
+
+                    <div class="settings-actions">
+                      <button class="primary-button" id="saveSettingsButton" type="button">保存联系人设置</button>
+                    </div>
+                  </div>
                 </div>
               </div>
+            </section>
 
-              <label class="settings-field">
-                <span>显示名</span>
-                <input id="userDisplayNameInput" type="text" maxlength="40" placeholder="我" />
-              </label>
+            <section class="settings-accordion-item">
+              <button class="settings-accordion-button" id="settingsPreferencesTab" type="button" data-settings-tab="preferences" aria-expanded="false">
+                <span>偏好</span>
+                <span class="settings-accordion-chevron">⌄</span>
+              </button>
 
-              <label class="settings-field">
-                <span>头像 URL</span>
-                <input id="userAvatarUrlInput" type="url" placeholder="https://example.com/avatar.jpg" />
-              </label>
+              <div class="settings-accordion-panel" id="settingsPreferencesSection" data-settings-panel="preferences" hidden>
+                <div class="settings-section">
+                  <div class="settings-section-title">偏好</div>
+                  <p class="settings-section-copy">这里预留后续扩展位，后面可以继续接入语种、主题、消息密度等工作区级设置。</p>
 
-              <div class="settings-actions">
-                <button class="primary-button" id="saveUserSettingsButton" type="button">保存我的设置</button>
-              </div>
-            </div>
-          </section>
+                  <div class="settings-card settings-card-muted">
+                    <label class="settings-field">
+                      <span>界面语种</span>
+                      <select disabled>
+                        <option>简体中文（即将开放）</option>
+                      </select>
+                    </label>
 
-          <section class="settings-section">
-            <div class="settings-section-title">当前 Agent</div>
-            <p class="settings-section-copy" id="agentSettingsHint">选择左侧 agent 后，可在这里改本页面显示名和头像。</p>
-            <div class="settings-card">
-              <div class="settings-preview-row">
-                <div class="settings-avatar-preview agent" id="agentAvatarPreview"></div>
-                <div class="settings-preview-copy">
-                  <div class="settings-preview-label" id="agentPreviewTitle">尚未选择 agent</div>
-                  <div class="settings-preview-subtitle" id="agentPreviewSubtitle">左侧列表、顶部标题和消息头像会同步更新</div>
+                    <label class="settings-field">
+                      <span>主题模式</span>
+                      <select disabled>
+                        <option>跟随系统 / Dark Mode（即将开放）</option>
+                      </select>
+                    </label>
+
+                    <div class="settings-field-hint">设置面板已按展开式分区组织，后续继续加项目时不需要再重做结构。</div>
+                  </div>
                 </div>
               </div>
-
-              <label class="settings-field">
-                <span>显示名</span>
-                <input id="agentDisplayNameInput" type="text" maxlength="60" placeholder="选择 agent 后可编辑" />
-              </label>
-
-              <label class="settings-field">
-                <span>头像 URL</span>
-                <input id="agentAvatarUrlInput" type="url" placeholder="https://example.com/agent-avatar.jpg" />
-              </label>
-
-              <div class="settings-actions">
-                <button class="primary-button" id="saveAgentSettingsButton" type="button">保存当前 Agent</button>
-              </div>
-            </div>
-          </section>
+            </section>
+          </div>
         </div>
       </aside>
 

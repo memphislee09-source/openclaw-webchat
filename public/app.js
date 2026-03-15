@@ -11,6 +11,13 @@ const state = {
   pollingTimer: null,
   selectedOpenPromise: null,
   settingsOpen: false,
+  settingsExpandedSection: null,
+  settingsSelectedContactKey: null,
+  settingsDraftDisplayName: '',
+  settingsDraftAvatarUrl: null,
+  settingsDraftAvatarFile: null,
+  settingsDraftAvatarPreviewUrl: null,
+  settingsAvatarRemoved: false,
   mediaViewerOpen: false,
   mediaViewerScale: 1,
   mediaViewerOffsetX: 0,
@@ -48,18 +55,20 @@ const settingsButtonEl = document.getElementById('settingsButton');
 const settingsBackdropEl = document.getElementById('settingsBackdrop');
 const settingsPanelEl = document.getElementById('settingsPanel');
 const closeSettingsButtonEl = document.getElementById('closeSettingsButton');
-const userAvatarPreviewEl = document.getElementById('userAvatarPreview');
-const userPreviewSubtitleEl = document.getElementById('userPreviewSubtitle');
-const userDisplayNameInputEl = document.getElementById('userDisplayNameInput');
-const userAvatarUrlInputEl = document.getElementById('userAvatarUrlInput');
-const saveUserSettingsButtonEl = document.getElementById('saveUserSettingsButton');
-const agentAvatarPreviewEl = document.getElementById('agentAvatarPreview');
-const agentPreviewTitleEl = document.getElementById('agentPreviewTitle');
-const agentPreviewSubtitleEl = document.getElementById('agentPreviewSubtitle');
-const agentSettingsHintEl = document.getElementById('agentSettingsHint');
-const agentDisplayNameInputEl = document.getElementById('agentDisplayNameInput');
-const agentAvatarUrlInputEl = document.getElementById('agentAvatarUrlInput');
-const saveAgentSettingsButtonEl = document.getElementById('saveAgentSettingsButton');
+const settingsContactsTabEl = document.getElementById('settingsContactsTab');
+const settingsPreferencesTabEl = document.getElementById('settingsPreferencesTab');
+const settingsContactsSectionEl = document.getElementById('settingsContactsSection');
+const settingsPreferencesSectionEl = document.getElementById('settingsPreferencesSection');
+const settingsAvatarPreviewEl = document.getElementById('settingsAvatarPreview');
+const settingsPreviewTitleEl = document.getElementById('settingsPreviewTitle');
+const settingsPreviewSubtitleEl = document.getElementById('settingsPreviewSubtitle');
+const settingsContactSelectEl = document.getElementById('settingsContactSelect');
+const settingsDisplayNameInputEl = document.getElementById('settingsDisplayNameInput');
+const settingsAvatarFileInputEl = document.getElementById('settingsAvatarFileInput');
+const settingsChooseAvatarButtonEl = document.getElementById('settingsChooseAvatarButton');
+const settingsClearAvatarButtonEl = document.getElementById('settingsClearAvatarButton');
+const settingsAvatarHintEl = document.getElementById('settingsAvatarHint');
+const saveSettingsButtonEl = document.getElementById('saveSettingsButton');
 const mediaViewerEl = document.getElementById('mediaViewer');
 const mediaViewerImageEl = document.getElementById('mediaViewerImage');
 const mediaZoomOutButtonEl = document.getElementById('mediaZoomOutButton');
@@ -105,12 +114,17 @@ function bindEvents() {
   settingsButtonEl.addEventListener('click', () => toggleSettingsPanel(true));
   closeSettingsButtonEl.addEventListener('click', () => toggleSettingsPanel(false));
   settingsBackdropEl.addEventListener('click', () => toggleSettingsPanel(false));
-  saveUserSettingsButtonEl.addEventListener('click', saveUserSettings);
-  saveAgentSettingsButtonEl.addEventListener('click', saveAgentSettings);
-  userDisplayNameInputEl.addEventListener('input', renderSettingsPreview);
-  userAvatarUrlInputEl.addEventListener('input', renderSettingsPreview);
-  agentDisplayNameInputEl.addEventListener('input', renderSettingsPreview);
-  agentAvatarUrlInputEl.addEventListener('input', renderSettingsPreview);
+  settingsContactsTabEl.addEventListener('click', () => switchSettingsTab('contacts'));
+  settingsPreferencesTabEl.addEventListener('click', () => switchSettingsTab('preferences'));
+  settingsContactSelectEl.addEventListener('change', () => loadSettingsDraft(settingsContactSelectEl.value));
+  settingsDisplayNameInputEl.addEventListener('input', () => {
+    state.settingsDraftDisplayName = settingsDisplayNameInputEl.value;
+    renderSettingsPreview();
+  });
+  settingsChooseAvatarButtonEl.addEventListener('click', () => settingsAvatarFileInputEl.click());
+  settingsClearAvatarButtonEl.addEventListener('click', clearSettingsAvatarDraft);
+  settingsAvatarFileInputEl.addEventListener('change', handleSettingsAvatarSelection);
+  saveSettingsButtonEl.addEventListener('click', saveSettingsContact);
   mediaViewerEl.addEventListener('click', closeMediaViewer);
   mediaViewerEl.addEventListener('wheel', handleMediaViewerWheel, { passive: false });
   mediaViewerImageEl.addEventListener('click', handleMediaViewerImageClick);
@@ -324,10 +338,7 @@ function renderMessages() {
   }
 
   if (state.sending) {
-    const loading = document.createElement('div');
-    loading.className = 'loading-chip';
-    loading.textContent = '正在等待 assistant 最终回复…';
-    messageListEl.append(loading);
+    messageListEl.append(createAssistantProcessingRow());
   }
 }
 
@@ -511,7 +522,14 @@ async function handleSendSubmit(event) {
     createdAt: new Date().toISOString(),
     blocks: buildOptimisticBlocks(text, state.pendingUploads)
   };
+  const draftText = text;
+  const draftAttachments = state.pendingUploads;
   state.messages.push(optimistic);
+  composerInputEl.value = '';
+  mediaUploadInputEl.value = '';
+  state.pendingUploads = [];
+  renderPendingUploads();
+  autoResizeComposer();
   renderMessages();
   scrollMessagesToBottom();
 
@@ -521,16 +539,17 @@ async function handleSendSubmit(event) {
       blocks: uploadedBlocks
     });
     if (response?.message) state.messages.push(response.message);
-    composerInputEl.value = '';
-    mediaUploadInputEl.value = '';
-    autoResizeComposer();
-    clearPendingUploads();
+    releasePendingUploads(draftAttachments);
     renderMessages();
     scrollMessagesToBottom();
     showStatus('发送完成。', 'success');
     await refreshAgents({ autoOpen: false });
   } catch (error) {
     state.messages = state.messages.filter((item) => item.id !== optimistic.id);
+    composerInputEl.value = draftText;
+    state.pendingUploads = draftAttachments;
+    renderPendingUploads();
+    autoResizeComposer();
     renderMessages();
     showStatus(`发送失败：${formatError(error)}`, 'error');
   } finally {
@@ -643,6 +662,26 @@ function createMessageAvatar(role) {
   });
 }
 
+function createAssistantProcessingRow() {
+  const row = document.createElement('div');
+  row.className = 'message-row assistant processing';
+
+  const avatar = createMessageAvatar('assistant');
+  const indicator = document.createElement('div');
+  indicator.className = 'processing-indicator';
+  indicator.setAttribute('aria-label', 'agent 正在处理');
+
+  for (let index = 0; index < 3; index += 1) {
+    const dot = document.createElement('span');
+    dot.className = 'processing-indicator-dot';
+    dot.style.animationDelay = `${index * 0.14}s`;
+    indicator.append(dot);
+  }
+
+  row.append(avatar, indicator);
+  return row;
+}
+
 function renderPendingUploads() {
   pendingUploadsEl.innerHTML = '';
   pendingUploadsEl.hidden = state.pendingUploads.length === 0;
@@ -720,14 +759,17 @@ function removePendingUpload(uploadId) {
 }
 
 function clearPendingUploads() {
-  for (const attachment of state.pendingUploads) {
+  releasePendingUploads(state.pendingUploads);
+  state.pendingUploads = [];
+  renderPendingUploads();
+}
+
+function releasePendingUploads(attachments) {
+  for (const attachment of attachments || []) {
     if (attachment?.previewUrl?.startsWith('blob:')) {
       URL.revokeObjectURL(attachment.previewUrl);
     }
   }
-
-  state.pendingUploads = [];
-  renderPendingUploads();
 }
 
 async function ensurePendingUploadsReady() {
@@ -821,6 +863,72 @@ function readFileAsBase64(file) {
       resolve(base64);
     };
     reader.readAsDataURL(file);
+  });
+}
+
+async function cropAvatarToSquare(file, outputSize = 512) {
+  const dataUrl = await readFileAsDataUrl(file);
+  const image = await loadImage(dataUrl);
+  const side = Math.min(image.naturalWidth || image.width, image.naturalHeight || image.height);
+  const sourceX = Math.max(0, ((image.naturalWidth || image.width) - side) / 2);
+  const sourceY = Math.max(0, ((image.naturalHeight || image.height) - side) / 2);
+  const canvas = document.createElement('canvas');
+  canvas.width = outputSize;
+  canvas.height = outputSize;
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('浏览器不支持头像裁剪。');
+  }
+
+  context.drawImage(image, sourceX, sourceY, side, side, 0, 0, outputSize, outputSize);
+  const blob = await canvasToBlob(canvas, 'image/png', 0.92);
+  const filename = toAvatarFilename(file.name);
+  return new File([blob], filename, { type: 'image/png' });
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`读取文件失败：${file?.name || 'unknown'}`));
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('图片加载失败，无法裁剪头像。'));
+    image.src = src;
+  });
+}
+
+function canvasToBlob(canvas, mimeType, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error('头像导出失败。'));
+        return;
+      }
+      resolve(blob);
+    }, mimeType, quality);
+  });
+}
+
+function toAvatarFilename(name) {
+  const base = String(name || 'avatar').replace(/\.[a-z0-9]+$/i, '').replace(/[^a-z0-9-_]+/gi, '-').replace(/^-+|-+$/g, '');
+  return `${base || 'avatar'}-square.png`;
+}
+
+async function uploadSettingsAvatar(file, target) {
+  const contentBase64 = await readFileAsBase64(file);
+  return apiPost('/api/openclaw-webchat/uploads', {
+    kind: 'image',
+    filename: `${target.kind}-${target.id}-${file.name}`,
+    mimeType: file.type || 'image/png',
+    contentBase64
   });
 }
 
@@ -948,39 +1056,130 @@ function toggleSettingsPanel(open) {
   state.settingsOpen = Boolean(open);
   appShellEl.classList.toggle('settings-open', state.settingsOpen);
   settingsPanelEl.setAttribute('aria-hidden', state.settingsOpen ? 'false' : 'true');
-  if (state.settingsOpen) populateSettingsForm();
+  if (state.settingsOpen) {
+    state.settingsExpandedSection = null;
+    populateSettingsForm({ resetDraft: true });
+  } else {
+    resetSettingsAvatarDraft();
+  }
 }
 
-function populateSettingsForm() {
-  userDisplayNameInputEl.value = state.userProfile.displayName || '我';
-  userAvatarUrlInputEl.value = state.userProfile.avatarUrl || '';
+function populateSettingsForm({ resetDraft = false } = {}) {
+  renderSettingsTabs();
+  renderSettingsContactOptions();
 
+  const currentKey = resolveValidSettingsContactKey(state.settingsSelectedContactKey);
+  if (resetDraft || currentKey !== state.settingsSelectedContactKey) {
+    loadSettingsDraft(currentKey);
+    return;
+  }
+
+  settingsContactSelectEl.value = currentKey;
+  settingsDisplayNameInputEl.value = state.settingsDraftDisplayName;
+  renderSettingsPreview();
+}
+
+function renderSettingsTabs() {
+  const isContacts = state.settingsExpandedSection === 'contacts';
+  const isPreferences = state.settingsExpandedSection === 'preferences';
+  settingsContactsTabEl.classList.toggle('active', isContacts);
+  settingsPreferencesTabEl.classList.toggle('active', isPreferences);
+  settingsContactsTabEl.setAttribute('aria-expanded', isContacts ? 'true' : 'false');
+  settingsPreferencesTabEl.setAttribute('aria-expanded', isPreferences ? 'true' : 'false');
+  settingsContactsSectionEl.hidden = !isContacts;
+  settingsPreferencesSectionEl.hidden = !isPreferences;
+}
+
+function switchSettingsTab(tab) {
+  const next = tab === 'preferences' ? 'preferences' : 'contacts';
+  state.settingsExpandedSection = state.settingsExpandedSection === next ? null : next;
+  if (state.settingsExpandedSection === 'contacts' && !state.settingsSelectedContactKey) {
+    loadSettingsDraft(getDefaultSettingsContactKey());
+  }
+  renderSettingsTabs();
+}
+
+function getSettingsContacts() {
+  return [
+    {
+      key: 'user:self',
+      kind: 'user',
+      id: 'self',
+      name: state.userProfile.displayName || '我',
+      avatarUrl: state.userProfile.avatarUrl || null,
+      subtitle: '用户自己'
+    },
+    ...state.agents.map((agent) => ({
+      key: `agent:${agent.agentId}`,
+      kind: 'agent',
+      id: agent.agentId,
+      name: agent.name || agent.agentId,
+      avatarUrl: agent.avatarUrl || null,
+      subtitle: `Agent · ${agent.agentId}`
+    }))
+  ];
+}
+
+function getDefaultSettingsContactKey() {
   const active = getActiveAgent();
-  agentDisplayNameInputEl.value = active?.name || '';
-  agentAvatarUrlInputEl.value = active?.avatarUrl || '';
-  agentDisplayNameInputEl.disabled = !active;
-  agentAvatarUrlInputEl.disabled = !active;
-  saveAgentSettingsButtonEl.disabled = !active;
-  agentSettingsHintEl.textContent = active
-    ? `当前正在编辑 ${active.agentId} 的页面显示，不影响上游 agent 本体。`
-    : '选择左侧 agent 后，可在这里改本页面显示名和头像。';
+  return active ? `agent:${active.agentId}` : 'user:self';
+}
+
+function resolveValidSettingsContactKey(key) {
+  const contacts = getSettingsContacts();
+  if (contacts.some((item) => item.key === key)) return key;
+  return getDefaultSettingsContactKey();
+}
+
+function resolveSettingsContact(key) {
+  return getSettingsContacts().find((item) => item.key === key) || null;
+}
+
+function renderSettingsContactOptions() {
+  const contacts = getSettingsContacts();
+  const selectedKey = resolveValidSettingsContactKey(state.settingsSelectedContactKey);
+  settingsContactSelectEl.innerHTML = '';
+
+  for (const contact of contacts) {
+    const option = document.createElement('option');
+    option.value = contact.key;
+    option.textContent = `${contact.name}${contact.kind === 'user' ? ' · 我' : ` · ${contact.id}`}`;
+    settingsContactSelectEl.append(option);
+  }
+
+  settingsContactSelectEl.value = selectedKey;
+}
+
+function loadSettingsDraft(contactKey) {
+  const target = resolveSettingsContact(resolveValidSettingsContactKey(contactKey));
+  if (!target) return;
+
+  resetSettingsAvatarDraft();
+  state.settingsSelectedContactKey = target.key;
+  state.settingsDraftDisplayName = target.name || (target.kind === 'user' ? '我' : target.id);
+  state.settingsDraftAvatarUrl = target.avatarUrl || null;
+  state.settingsAvatarRemoved = false;
+  settingsContactSelectEl.value = target.key;
+  settingsDisplayNameInputEl.value = state.settingsDraftDisplayName;
   renderSettingsPreview();
 }
 
 function renderSettingsPreview() {
-  const userName = userDisplayNameInputEl.value.trim() || '我';
-  const userAvatar = userAvatarUrlInputEl.value.trim() || null;
-  renderAvatarPreview(userAvatarPreviewEl, userAvatar, userName);
-  userPreviewSubtitleEl.textContent = `右侧气泡显示为 ${userName}`;
+  const target = resolveSettingsContact(state.settingsSelectedContactKey) || resolveSettingsContact(getDefaultSettingsContactKey());
+  const displayName = state.settingsDraftDisplayName.trim() || (target?.kind === 'user' ? '我' : target?.id || '联系人');
+  const avatarUrl = state.settingsDraftAvatarPreviewUrl || (state.settingsAvatarRemoved ? null : state.settingsDraftAvatarUrl);
 
-  const active = getActiveAgent();
-  const agentName = agentDisplayNameInputEl.value.trim() || active?.name || '尚未选择 agent';
-  const agentAvatar = agentAvatarUrlInputEl.value.trim() || active?.avatarUrl || null;
-  renderAvatarPreview(agentAvatarPreviewEl, agentAvatar, agentName);
-  agentPreviewTitleEl.textContent = agentName;
-  agentPreviewSubtitleEl.textContent = active
-    ? `将覆盖 ${active.agentId} 在列表、标题和消息中的显示`
-    : '左侧列表、顶部标题和消息头像会同步更新';
+  settingsAvatarPreviewEl.classList.toggle('agent', target?.kind === 'agent');
+  renderAvatarPreview(settingsAvatarPreviewEl, avatarUrl, displayName);
+  settingsPreviewTitleEl.textContent = displayName;
+  settingsPreviewSubtitleEl.textContent = target?.kind === 'user'
+    ? '会同步到消息区里“我”的头像与名称'
+    : `会同步到 ${target?.id || 'agent'} 的左栏、顶部标题和消息头像`;
+  settingsAvatarHintEl.textContent = state.settingsDraftAvatarPreviewUrl
+    ? '头像已自动裁成正方形，点击保存后生效。'
+    : state.settingsAvatarRemoved
+      ? '头像将在保存后移除。'
+      : '支持本地图片，保存时自动裁成正方形并上传。';
 }
 
 function renderAvatarPreview(element, avatarUrl, label) {
@@ -1004,45 +1203,94 @@ function renderAvatarPreview(element, avatarUrl, label) {
   element.textContent = (label || '?').slice(0, 1).toUpperCase();
 }
 
-async function saveUserSettings() {
+function resetSettingsAvatarDraft() {
+  if (state.settingsDraftAvatarPreviewUrl?.startsWith('blob:')) {
+    URL.revokeObjectURL(state.settingsDraftAvatarPreviewUrl);
+  }
+  state.settingsDraftAvatarPreviewUrl = null;
+  state.settingsDraftAvatarFile = null;
+  settingsAvatarFileInputEl.value = '';
+}
+
+function clearSettingsAvatarDraft() {
+  resetSettingsAvatarDraft();
+  state.settingsAvatarRemoved = true;
+  renderSettingsPreview();
+}
+
+async function handleSettingsAvatarSelection(event) {
+  const [file] = Array.from(event.target.files || []);
+  event.target.value = '';
+  if (!file) return;
+
+  if (!String(file.type || '').startsWith('image/')) {
+    showStatus('头像仅支持图片文件。', 'error');
+    return;
+  }
+
   try {
-    const payload = await apiPatch('/api/openclaw-webchat/settings/user-profile', {
-      displayName: userDisplayNameInputEl.value.trim() || '我',
-      avatarUrl: userAvatarUrlInputEl.value.trim() || null
-    });
-    state.userProfile = {
-      displayName: payload?.userProfile?.displayName || '我',
-      avatarUrl: payload?.userProfile?.avatarUrl || null
-    };
-    populateSettingsForm();
-    renderMessages();
-    showStatus('我的显示设置已保存。', 'success');
+    const avatarFile = await cropAvatarToSquare(file);
+    resetSettingsAvatarDraft();
+    state.settingsDraftAvatarFile = avatarFile;
+    state.settingsDraftAvatarPreviewUrl = URL.createObjectURL(avatarFile);
+    state.settingsAvatarRemoved = false;
+    renderSettingsPreview();
   } catch (error) {
-    showStatus(`保存失败：${formatError(error)}`, 'error');
+    showStatus(`头像处理失败：${formatError(error)}`, 'error');
   }
 }
 
-async function saveAgentSettings() {
-  const active = getActiveAgent();
-  if (!active) return;
+async function saveSettingsContact() {
+  const target = resolveSettingsContact(state.settingsSelectedContactKey);
+  if (!target) return;
+
+  saveSettingsButtonEl.disabled = true;
+  settingsContactSelectEl.disabled = true;
+  settingsDisplayNameInputEl.disabled = true;
+  settingsChooseAvatarButtonEl.disabled = true;
+  settingsClearAvatarButtonEl.disabled = true;
 
   try {
-    const payload = await apiPatch(`/api/openclaw-webchat/agents/${encodeURIComponent(active.agentId)}/profile`, {
-      displayName: agentDisplayNameInputEl.value.trim() || null,
-      avatarUrl: agentAvatarUrlInputEl.value.trim() || null
-    });
+    let avatarUrl = state.settingsAvatarRemoved ? null : state.settingsDraftAvatarUrl;
+    if (state.settingsDraftAvatarFile) {
+      showStatus('正在上传头像…', 'info');
+      const upload = await uploadSettingsAvatar(state.settingsDraftAvatarFile, target);
+      avatarUrl = upload?.block?.url || avatarUrl;
+    }
 
-    updateLocalAgentProfile(active.agentId, {
-      name: payload?.profile?.displayName || active.agentId,
-      avatarUrl: payload?.profile?.avatarUrl || null
-    });
+    if (target.kind === 'user') {
+      const payload = await apiPatch('/api/openclaw-webchat/settings/user-profile', {
+        displayName: state.settingsDraftDisplayName.trim() || '我',
+        avatarUrl
+      });
+      state.userProfile = {
+        displayName: payload?.userProfile?.displayName || '我',
+        avatarUrl: payload?.userProfile?.avatarUrl || null
+      };
+    } else {
+      const payload = await apiPatch(`/api/openclaw-webchat/agents/${encodeURIComponent(target.id)}/profile`, {
+        displayName: state.settingsDraftDisplayName.trim() || null,
+        avatarUrl
+      });
+      updateLocalAgentProfile(target.id, {
+        name: payload?.profile?.displayName || target.id,
+        avatarUrl: payload?.profile?.avatarUrl || null
+      });
+    }
+
     renderAgentList();
     updateHeader();
-    populateSettingsForm();
     renderMessages();
-    showStatus('当前 agent 显示已保存。', 'success');
+    loadSettingsDraft(target.key);
+    showStatus('联系人设置已保存。', 'success');
   } catch (error) {
     showStatus(`保存失败：${formatError(error)}`, 'error');
+  } finally {
+    saveSettingsButtonEl.disabled = false;
+    settingsContactSelectEl.disabled = false;
+    settingsDisplayNameInputEl.disabled = false;
+    settingsChooseAvatarButtonEl.disabled = false;
+    settingsClearAvatarButtonEl.disabled = false;
   }
 }
 

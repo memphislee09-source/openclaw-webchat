@@ -31,6 +31,9 @@ async function checkPageShell() {
   assert(html.includes('id="attachButton"'), 'page should contain attachButton');
   assert(html.includes('id="mediaUploadInput"'), 'page should contain mediaUploadInput');
   assert(html.includes('id="settingsPanel"'), 'page should contain settingsPanel');
+  assert(html.includes('id="settingsContactSelect"'), 'page should contain settingsContactSelect');
+  assert(html.includes('id="saveSettingsButton"'), 'page should contain saveSettingsButton');
+  assert(html.includes('id="settingsPreferencesSection"'), 'page should contain settingsPreferencesSection');
   assert(html.includes('id="mediaViewer"'), 'page should contain mediaViewer');
   assert(html.includes('id="mediaViewerImage"'), 'page should contain mediaViewerImage');
 
@@ -38,12 +41,14 @@ async function checkPageShell() {
   const css = await getText('/static/styles.css');
   assert(appJs.includes('async function openAgent'), 'app.js should include openAgent');
   assert(appJs.includes('async function ensurePendingUploadsReady'), 'app.js should include image upload flow');
-  assert(appJs.includes('async function saveAgentSettings'), 'app.js should include visual agent settings');
+  assert(appJs.includes('async function saveSettingsContact'), 'app.js should include unified visual contact settings');
+  assert(appJs.includes('async function cropAvatarToSquare'), 'app.js should include avatar crop flow');
   assert(appJs.includes('function openMediaViewer'), 'app.js should include image viewer flow');
   assert(appJs.includes('function handleMediaViewerPointerDown'), 'app.js should include image pan flow');
   assert(css.includes('.agent-card'), 'styles.css should include agent-card styles');
   assert(css.includes('.pending-upload'), 'styles.css should include pending upload styles');
   assert(css.includes('.settings-panel'), 'styles.css should include settings panel styles');
+  assert(css.includes('.settings-accordion'), 'styles.css should include accordion settings layout styles');
   assert(css.includes('.media-viewer'), 'styles.css should include media viewer styles');
 }
 
