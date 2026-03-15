@@ -33,7 +33,8 @@
 - 支持：图片、音频、视频、文件。
 - 优先正确渲染；资源丢失时显示“文件丢失”。
 - 协议双兼容：
-  - 兼容 `openclaw-agent-chat-ui` 现有 media 协议
+  - **优先采用结构化 attachment / media block** 作为内部标准表示与渲染协议
+  - 兼容 `openclaw-agent-chat-ui` 现有 `mediaUrl:` / `MEDIA:` 媒体协议作为 fallback
   - 兼容未来 OpenClaw 原生结构化媒体返回
 
 ### User → Agent
@@ -71,6 +72,13 @@
 - assistant 最终回复：文本流式显示，媒体在最终完成后补上。
 - 平板：保留左右布局。
 - 手机：左侧 agents 列表收为侧滑抽屉。
+
+## 工程约束
+1. 尽量降低对 OpenClaw 内部前端实现的耦合，避免每次升级都需大量适配。
+2. 借鉴 OpenClaw 官方前端的布局和风格，但不深度绑定其内部结构。
+3. 富媒体和历史能力优先复用/借鉴 `openclaw-agent-chat-ui` 的成熟方案。
+4. 搜索/筛选历史不在 MVP，放入第二阶段。
+链路，而不是用户重复提醒。
 
 ## 工程约束
 1. 尽量降低对 OpenClaw 内部前端实现的耦合，避免每次升级都需大量适配。
