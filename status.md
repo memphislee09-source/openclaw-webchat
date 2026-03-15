@@ -28,6 +28,9 @@
 - [x] 左栏 agent 条目调整为“左侧独立头像 + 右侧上下两栏（名字 / 最新消息）”
 - [x] 增强 gateway 调用稳定性：增加断连重试与长耗时回复等待窗口
 - [x] 实测打通 `baichai` 发图链路，webchat 已可收到图片 block
+- [x] 修复用户设置接口运行时缺陷：补齐 `USER_PROFILE_FILE` 持久化文件
+- [x] 完成 Phase 3 第一段：用户图片上传接口、落盘、预览与发送集成
+- [x] 扩展 `npm run selftest`：新增 settings 与 upload 回归覆盖
 
 ## 仓库信息
 - 本地路径：`/Users/memphis/.openclaw/workspace-mira/openclaw-webchat`
@@ -47,8 +50,8 @@
 - 手机端抽屉布局，平板保留左右布局
 
 ## 下一步
-1. Phase 3：assistant 图片/音频/视频/文件渲染细化与上传能力补齐
-2. 用户图片上传与音频上传 + 自动转写
+1. Phase 3：用户音频上传 + 自动转写
+2. assistant 图片/音频/视频/文件渲染细节与异常态继续打磨
 3. 左侧 agent 摘要与活跃状态的细节打磨
 4. Phase 4：设置页与 agent 个性化显示（显示名/头像）
 5. 更完整的前端交互回归与移动端适配验证

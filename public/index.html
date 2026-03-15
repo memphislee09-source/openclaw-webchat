@@ -55,12 +55,17 @@
 
           <div class="composer-wrap">
             <form class="composer" id="composerForm">
-              <textarea
-                id="composerInput"
-                placeholder="输入消息，Enter 发送，Shift+Enter 换行；/new 可重置上游上下文"
-                rows="1"
-              ></textarea>
+              <div class="composer-main">
+                <div class="pending-uploads" id="pendingUploads" hidden></div>
+                <textarea
+                  id="composerInput"
+                  placeholder="输入消息，Enter 发送，Shift+Enter 换行；/new 可重置上游上下文"
+                  rows="1"
+                ></textarea>
+              </div>
               <div class="composer-actions">
+                <input id="imageUploadInput" type="file" accept="image/*" multiple hidden />
+                <button class="ghost-button" type="button" id="attachImageButton">加图片</button>
                 <button class="ghost-button" type="button" id="newContextButton">/new</button>
                 <button class="primary-button" type="submit" id="sendButton">发送</button>
               </div>

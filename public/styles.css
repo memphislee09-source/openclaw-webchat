@@ -264,7 +264,8 @@ button {
 .chat-header-left,
 .chat-title-row,
 .chat-header-actions,
-.composer-actions {
+.composer-actions,
+.pending-upload {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -414,6 +415,68 @@ button {
   align-items: end;
 }
 
+.composer-main {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.pending-uploads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pending-upload {
+  min-width: 0;
+  max-width: min(100%, 280px);
+  padding: 10px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(135deg, rgba(59, 130, 246, 0.09), rgba(255, 255, 255, 0.03)),
+    rgba(255, 255, 255, 0.03);
+  box-shadow: var(--shadow);
+}
+
+.pending-upload-preview {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  object-fit: cover;
+  flex: none;
+  border: 1px solid var(--line);
+}
+
+.pending-upload-meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.pending-upload-name,
+.pending-upload-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pending-upload-name {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.pending-upload-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.pending-upload-remove {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #fca5a5;
+}
+
 .composer textarea {
   resize: none;
   width: 100%;
@@ -495,5 +558,9 @@ button {
 
   .composer-actions {
     justify-content: space-between;
+  }
+
+  .pending-upload {
+    max-width: 100%;
   }
 }

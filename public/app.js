@@ -3,6 +3,7 @@ const state = {
   activeAgentId: null,
   activeSessionKey: null,
   messages: [],
+  pendingUploads: [],
   nextBefore: null,
   hasMore: false,
   loadingHistory: false,
@@ -25,10 +26,14 @@ const composerFormEl = document.getElementById('composerForm');
 const composerInputEl = document.getElementById('composerInput');
 const sendButtonEl = document.getElementById('sendButton');
 const newContextButtonEl = document.getElementById('newContextButton');
+const attachImageButtonEl = document.getElementById('attachImageButton');
+const imageUploadInputEl = document.getElementById('imageUploadInput');
+const pendingUploadsEl = document.getElementById('pendingUploads');
 const openSidebarButtonEl = document.getElementById('openSidebarButton');
 const closeSidebarButtonEl = document.getElementById('closeSidebarButton');
 const sidebarBackdropEl = document.getElementById('sidebarBackdrop');
 const headerRefreshButtonEl = document.getElementById('headerRefreshButton');
+const refreshAgentsButtonEl = document.getElementById('refreshAgentsButton');
 const settingsButtonEl = document.getElementById('settingsButton');
 const appShellEl = document.querySelector('.app-shell');
 
@@ -46,6 +51,9 @@ function bindEvents() {
   composerFormEl.addEventListener('submit', handleSendSubmit);
   newContextButtonEl.addEventListener('click', handleNewContext);
   headerRefreshButtonEl.addEventListener('click', () => refreshAgents({ autoOpen: false, refreshCurrent: true }));
+  refreshAgentsButtonEl?.addEventListener('click', () => refreshAgents({ autoOpen: false, refreshCurrent: true }));
+  attachImageButtonEl.addEventListener('click', () => imageUploadInputEl.click());
+  imageUploadInputEl.addEventListener('change', handleImageSelection);
   composerInputEl.addEventListener('input', autoResizeComposer);
   composerInputEl.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -328,32 +336,47 @@ async function handleSendSubmit(event) {
   if (!state.activeSessionKey || state.sending) return;
 
   const text = composerInputEl.value.trim();
-  if (!text) return;
-  if (text === '/new') {
+  if (!text && !state.pendingUploads.length) return;
+  if (text === '/new' && !state.pendingUploads.length) {
     await handleNewContext();
     return;
   }
 
   state.sending = true;
   setComposerEnabled(false);
-  showStatus('消息发送中…', 'info');
+  showStatus(state.pendingUploads.length ? '正在上传图片并发送…' : '消息发送中…', 'info');
+
+  let uploadedBlocks = [];
+
+  try {
+    uploadedBlocks = await ensurePendingUploadsReady();
+  } catch (error) {
+    state.sending = false;
+    setComposerEnabled(true);
+    showStatus(`图片上传失败：${formatError(error)}`, 'error');
+    return;
+  }
 
   const optimistic = {
     id: `local-${Date.now()}`,
     role: 'user',
     createdAt: new Date().toISOString(),
-    blocks: [{ type: 'text', text }]
+    blocks: buildOptimisticBlocks(text, state.pendingUploads)
   };
   state.messages.push(optimistic);
   renderMessages();
   scrollMessagesToBottom();
 
   try {
-    composerInputEl.value = '';
-    autoResizeComposer();
-
-    const response = await apiPost(`/api/openclaw-webchat/sessions/${encodeURIComponent(state.activeSessionKey)}/send`, { text });
+    const response = await apiPost(`/api/openclaw-webchat/sessions/${encodeURIComponent(state.activeSessionKey)}/send`, {
+      text,
+      blocks: uploadedBlocks
+    });
     if (response?.message) state.messages.push(response.message);
+    composerInputEl.value = '';
+    imageUploadInputEl.value = '';
+    autoResizeComposer();
+    clearPendingUploads();
     renderMessages();
     scrollMessagesToBottom();
     showStatus('发送完成。', 'success');
@@ -368,6 +391,34 @@ async function handleSendSubmit(event) {
     renderMessages();
     scrollMessagesToBottom();
   }
+}
+
+async function handleImageSelection(event) {
+  const files = Array.from(event.target.files || []);
+  if (!files.length) return;
+
+  const additions = [];
+  for (const file of files) {
+    if (!String(file.type || '').startsWith('image/')) {
+      showStatus(`仅支持图片上传：${file.name}`, 'error');
+      continue;
+    }
+
+    additions.push({
+      id: `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      file,
+      kind: 'image',
+      name: file.name,
+      mimeType: file.type || 'image/png',
+      previewUrl: URL.createObjectURL(file),
+      source: null,
+      uploadedUrl: null
+    });
+  }
+
+  state.pendingUploads.push(...additions);
+  renderPendingUploads();
+  event.target.value = '';
 }
 
 async function handleNewContext() {
@@ -439,6 +490,134 @@ function createAvatarElement({ className, avatarUrl, label, fallbackText }) {
   return avatar;
 }
 
+function renderPendingUploads() {
+  pendingUploadsEl.innerHTML = '';
+  pendingUploadsEl.hidden = state.pendingUploads.length === 0;
+
+  for (const attachment of state.pendingUploads) {
+    const item = document.createElement('div');
+    item.className = 'pending-upload';
+
+    const preview = document.createElement('img');
+    preview.className = 'pending-upload-preview';
+    preview.src = attachment.previewUrl || attachment.uploadedUrl || '';
+    preview.alt = attachment.name || '图片预览';
+
+    const meta = document.createElement('div');
+    meta.className = 'pending-upload-meta';
+
+    const title = document.createElement('div');
+    title.className = 'pending-upload-name';
+    title.textContent = attachment.name || '未命名图片';
+
+    const subtitle = document.createElement('div');
+    subtitle.className = 'pending-upload-hint';
+    subtitle.textContent = attachment.source ? '已就绪，发送时会一并带上' : '发送时自动上传';
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'pending-upload-remove';
+    remove.textContent = '移除';
+    remove.disabled = state.sending;
+    remove.addEventListener('click', () => removePendingUpload(attachment.id));
+
+    meta.append(title, subtitle);
+    item.append(preview, meta, remove);
+    pendingUploadsEl.append(item);
+  }
+}
+
+function removePendingUpload(uploadId) {
+  const target = state.pendingUploads.find((item) => item.id === uploadId);
+  if (target?.previewUrl?.startsWith('blob:')) {
+    URL.revokeObjectURL(target.previewUrl);
+  }
+
+  state.pendingUploads = state.pendingUploads.filter((item) => item.id !== uploadId);
+  renderPendingUploads();
+}
+
+function clearPendingUploads() {
+  for (const attachment of state.pendingUploads) {
+    if (attachment?.previewUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(attachment.previewUrl);
+    }
+  }
+
+  state.pendingUploads = [];
+  renderPendingUploads();
+}
+
+async function ensurePendingUploadsReady() {
+  const blocks = [];
+
+  for (let index = 0; index < state.pendingUploads.length; index += 1) {
+    const attachment = state.pendingUploads[index];
+
+    if (!attachment.source) {
+      showStatus(`正在上传图片 ${index + 1}/${state.pendingUploads.length}…`, 'info');
+      const payload = await uploadPendingImage(attachment);
+      attachment.source = payload?.upload?.source || null;
+      attachment.uploadedUrl = payload?.block?.url || null;
+      if (!attachment.source) {
+        throw new Error(`上传失败：${attachment.name || '图片'}`);
+      }
+    }
+
+    blocks.push({
+      type: attachment.kind,
+      source: attachment.source,
+      name: attachment.name
+    });
+  }
+
+  return blocks;
+}
+
+async function uploadPendingImage(attachment) {
+  const contentBase64 = await readFileAsBase64(attachment.file);
+  return apiPost('/api/openclaw-webchat/uploads', {
+    kind: 'image',
+    filename: attachment.name,
+    mimeType: attachment.mimeType,
+    contentBase64
+  });
+}
+
+function buildOptimisticBlocks(text, attachments) {
+  const blocks = [];
+  if (text) {
+    blocks.push({ type: 'text', text });
+  }
+
+  for (const attachment of attachments) {
+    blocks.push({
+      type: attachment.kind,
+      url: attachment.uploadedUrl || attachment.previewUrl || '',
+      name: attachment.name
+    });
+  }
+
+  return blocks;
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`读取文件失败：${file?.name || 'unknown'}`));
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      const [, base64 = ''] = result.split(',', 2);
+      if (!base64) {
+        reject(new Error(`读取文件失败：${file?.name || 'unknown'}`));
+        return;
+      }
+      resolve(base64);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function createMessageAvatar(role) {
   if (role === 'user') {
     return createAvatarElement({
@@ -478,6 +657,9 @@ function setComposerEnabled(enabled) {
   composerInputEl.disabled = !enabled;
   sendButtonEl.disabled = !enabled;
   newContextButtonEl.disabled = !enabled;
+  attachImageButtonEl.disabled = !enabled;
+  imageUploadInputEl.disabled = !enabled;
+  renderPendingUploads();
 }
 
 function startPolling() {

@@ -16,6 +16,7 @@ const OPENCLAW_BIN = process.env.OPENCLAW_BIN || 'openclaw';
 const DATA_DIR = path.resolve(process.env.OPENCLAW_WEBCHAT_DATA_DIR || path.resolve(__dirname, '../data'));
 const BINDINGS_FILE = path.join(DATA_DIR, 'session-bindings.json');
 const PROFILES_FILE = path.join(DATA_DIR, 'agent-profiles.json');
+const USER_PROFILE_FILE = path.join(DATA_DIR, 'user-profile.json');
 const HISTORY_DIR = path.join(DATA_DIR, 'history');
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 const MEDIA_SECRET = process.env.OPENCLAW_WEBCHAT_MEDIA_SECRET || 'openclaw-webchat-local-secret';
@@ -24,6 +25,7 @@ const NAMESPACE = 'openclaw-webchat';
 const BOOTSTRAP_VERSION = '2026-03-15.phase1';
 const ACTIVE_RECENT_WINDOW_MS = 5 * 60 * 1000;
 const ASSISTANT_WAIT_TIMEOUT_MS = Number(process.env.OPENCLAW_WEBCHAT_ASSISTANT_WAIT_TIMEOUT_MS || 120000);
+const MAX_UPLOAD_BYTES = Number(process.env.OPENCLAW_WEBCHAT_MAX_UPLOAD_BYTES || 10 * 1024 * 1024);
 
 const BOOTSTRAP_TEXT = [
   '[openclaw-webchat hidden bootstrap]',
@@ -45,6 +47,7 @@ ensureDir(HISTORY_DIR);
 ensureDir(UPLOADS_DIR);
 ensureJsonFile(BINDINGS_FILE, '{}');
 ensureJsonFile(PROFILES_FILE, '{}');
+ensureJsonFile(USER_PROFILE_FILE, JSON.stringify({ displayName: '我', avatarUrl: null }, null, 2));
 
 app.get('/healthz', (_req, res) => {
   res.json({ ok: true, service: NAMESPACE, port: PORT, namespace: NAMESPACE });
@@ -196,6 +199,57 @@ app.patch('/api/openclaw-webchat/settings/user-profile', (req, res) => {
     };
     writeJson(USER_PROFILE_FILE, next);
     res.json({ ok: true, userProfile: next });
+  } catch (error) {
+    res.status(500).json({ error: formatError(error) });
+  }
+});
+
+app.post('/api/openclaw-webchat/uploads', (req, res) => {
+  const kind = String(req.body?.kind || '').toLowerCase();
+  const filename = normalizeOptionalString(req.body?.filename) || 'upload';
+  const mimeType = normalizeOptionalString(req.body?.mimeType) || 'application/octet-stream';
+  const contentBase64 = normalizeOptionalString(req.body?.contentBase64);
+
+  if (kind !== 'image') {
+    return res.status(400).json({ error: 'Only image uploads are supported right now.' });
+  }
+
+  if (!contentBase64) {
+    return res.status(400).json({ error: 'Upload content is empty.' });
+  }
+
+  if (!isSupportedUploadMime(kind, mimeType) && !isImageFilename(filename)) {
+    return res.status(400).json({ error: 'Unsupported image type.' });
+  }
+
+  try {
+    const buffer = Buffer.from(contentBase64, 'base64');
+    if (!buffer.length) {
+      return res.status(400).json({ error: 'Upload content is empty.' });
+    }
+
+    if (buffer.byteLength > MAX_UPLOAD_BYTES) {
+      return res.status(413).json({ error: `Image is too large. Limit is ${Math.floor(MAX_UPLOAD_BYTES / (1024 * 1024))} MB.` });
+    }
+
+    const stored = persistUpload({ kind, filename, mimeType, buffer });
+    const block = {
+      type: kind,
+      source: stored.filePath,
+      name: stored.displayName
+    };
+
+    res.json({
+      ok: true,
+      upload: {
+        kind,
+        source: stored.filePath,
+        name: stored.displayName,
+        size: buffer.byteLength,
+        mimeType
+      },
+      block: presentBlock(block)
+    });
   } catch (error) {
     res.status(500).json({ error: formatError(error) });
   }
@@ -593,6 +647,16 @@ function normalizeInputBlocks(value) {
   return dedupeBlocks(blocks);
 }
 
+function persistUpload({ kind, filename, mimeType, buffer }) {
+  const safeBase = sanitizeUploadBaseName(filename);
+  const extension = inferUploadExtension(filename, mimeType, kind);
+  const displayName = safeBase.endsWith(extension) ? safeBase : `${safeBase}${extension}`;
+  const stamped = `${Date.now()}-${cryptoId()}-${displayName}`;
+  const filePath = path.join(UPLOADS_DIR, stamped);
+  fs.writeFileSync(filePath, buffer);
+  return { filePath, displayName };
+}
+
 function appendHistory(agentId, sessionKey, message) {
   const row = normalizeHistoryRow({
     agentId,
@@ -874,6 +938,43 @@ function guessMediaTypeByPath(value) {
   if (/\.(mp3|wav|m4a|aac|ogg|flac|opus)$/.test(lower)) return 'audio';
   if (/\.(mp4|mov|webm|m4v|mkv)$/.test(lower)) return 'video';
   return 'file';
+}
+
+function isSupportedUploadMime(kind, mimeType) {
+  const mime = String(mimeType || '').toLowerCase();
+  if (kind !== 'image') return false;
+  return /^image\/(png|jpeg|jpg|gif|webp|bmp|svg\+xml)$/.test(mime);
+}
+
+function isImageFilename(filename) {
+  return guessMediaTypeByPath(filename) === 'image';
+}
+
+function sanitizeUploadBaseName(filename) {
+  const parsed = path.parse(String(filename || 'upload').trim() || 'upload');
+  const normalized = `${parsed.name || 'upload'}${parsed.ext || ''}`
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/\.{2,}/g, '.');
+  return normalized || 'upload';
+}
+
+function inferUploadExtension(filename, mimeType, kind) {
+  const parsed = path.parse(String(filename || '').trim());
+  if (parsed.ext) return parsed.ext.toLowerCase();
+
+  const mime = String(mimeType || '').toLowerCase();
+  if (kind === 'image') {
+    if (mime === 'image/png') return '.png';
+    if (mime === 'image/jpeg' || mime === 'image/jpg') return '.jpg';
+    if (mime === 'image/gif') return '.gif';
+    if (mime === 'image/webp') return '.webp';
+    if (mime === 'image/bmp') return '.bmp';
+    if (mime === 'image/svg+xml') return '.svg';
+    return '.png';
+  }
+
+  return '.bin';
 }
 
 function cleanMediaValue(value) {

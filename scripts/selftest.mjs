@@ -6,8 +6,10 @@ const unique = `selftest-${Date.now()}`;
 
 await checkHealth();
 await checkPageShell();
+await checkSettings();
 await checkAgents();
 await checkOpenAgent();
+await checkUpload();
 await checkSend();
 await checkReset();
 await checkHistory();
@@ -24,11 +26,40 @@ async function checkPageShell() {
   assert(html.includes('id="agentList"'), 'page should contain agentList');
   assert(html.includes('id="messageList"'), 'page should contain messageList');
   assert(html.includes('id="composerInput"'), 'page should contain composerInput');
+  assert(html.includes('id="attachImageButton"'), 'page should contain attachImageButton');
 
   const appJs = await getText('/static/app.js');
   const css = await getText('/static/styles.css');
   assert(appJs.includes('async function openAgent'), 'app.js should include openAgent');
+  assert(appJs.includes('async function ensurePendingUploadsReady'), 'app.js should include image upload flow');
   assert(css.includes('.agent-card'), 'styles.css should include agent-card styles');
+  assert(css.includes('.pending-upload'), 'styles.css should include pending upload styles');
+}
+
+async function checkSettings() {
+  const settings = await getJson('/api/openclaw-webchat/settings');
+  assert(settings?.userProfile, 'settings should return userProfile');
+  assert(typeof settings.userProfile.displayName === 'string', 'settings should include displayName');
+
+  const patched = await patchJson('/api/openclaw-webchat/settings/user-profile', {
+    displayName: 'Selftest',
+    avatarUrl: null
+  });
+  assert(patched?.userProfile?.displayName === 'Selftest', 'settings patch should persist displayName');
+}
+
+async function checkUpload() {
+  const payload = await postJson('/api/openclaw-webchat/uploads', {
+    kind: 'image',
+    filename: 'tiny.png',
+    mimeType: 'image/png',
+    contentBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2W2i8AAAAASUVORK5CYII='
+  });
+  assert(payload?.ok === true, 'upload should return ok=true');
+  assert(payload?.upload?.source, 'upload should return stored source');
+  assert(payload?.block?.type === 'image', 'upload should return image block');
+  const mediaResponse = await fetch(`${base}${payload.block.url}`);
+  assert(mediaResponse.ok, 'uploaded media url should be readable');
 }
 
 async function checkAgents() {
@@ -93,6 +124,19 @@ async function postJson(path, body) {
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch {}
   assert(response.ok, `POST ${path} failed: ${response.status} ${text}`);
+  return data;
+}
+
+async function patchJson(path, body) {
+  const response = await fetch(`${base}${path}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify(body || {})
+  });
+  const text = await response.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch {}
+  assert(response.ok, `PATCH ${path} failed: ${response.status} ${text}`);
   return data;
 }
 
