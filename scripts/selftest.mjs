@@ -1,6 +1,14 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 const base = process.env.OPENCLAW_WEBCHAT_BASE || 'http://127.0.0.1:3770';
 const agentId = process.env.OPENCLAW_WEBCHAT_TEST_AGENT || 'mira';
 const sessionKey = `openclaw-webchat:${agentId}`;
+const defaultBindingsFile = fileURLToPath(new URL('../data/session-bindings.json', import.meta.url));
+const bindingsFile = process.env.OPENCLAW_WEBCHAT_DATA_DIR
+  ? path.join(path.resolve(process.env.OPENCLAW_WEBCHAT_DATA_DIR), 'session-bindings.json')
+  : defaultBindingsFile;
 
 const unique = `selftest-${Date.now()}`;
 
@@ -130,11 +138,20 @@ async function checkSend() {
 }
 
 async function checkReset() {
+  const before = readBinding(agentId);
+  const beforeUpstreamSessionKey = before?.upstreamSessionKey || null;
+
   const payload = await postJson(`/api/openclaw-webchat/sessions/${encodeURIComponent(sessionKey)}/command`, {
     command: '/new'
   });
   assert(payload?.message?.role === 'marker', '/new should append marker');
   assert(payload?.message?.label === '已重置上下文', '/new marker label should match');
+
+  const after = readBinding(agentId);
+  assert(after?.upstreamSessionKey, '/new should keep an upstreamSessionKey');
+  if (beforeUpstreamSessionKey) {
+    assert(after.upstreamSessionKey !== beforeUpstreamSessionKey, '/new should rotate upstreamSessionKey to isolate late async completions');
+  }
 }
 
 async function checkHistory() {
@@ -150,6 +167,11 @@ function collectText(message) {
     .filter((block) => block.type === 'text')
     .map((block) => String(block.text || ''))
     .join('\n');
+}
+
+function readBinding(targetAgentId) {
+  const bindings = JSON.parse(fs.readFileSync(bindingsFile, 'utf8'));
+  return bindings?.[targetAgentId] || null;
 }
 
 async function getJson(path) {

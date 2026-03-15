@@ -295,6 +295,12 @@ app.listen(PORT, () => {
 });
 
 async function runUserTurn(binding, { text, inputBlocks }) {
+  const latestBinding = getBinding(binding.agentId) || binding;
+  const turnSnapshot = {
+    upstreamSessionKey: latestBinding.upstreamSessionKey,
+    upstreamGeneration: latestBinding.upstreamGeneration || null
+  };
+
   const userBlocks = [];
   if (text) userBlocks.push({ type: 'text', text });
   userBlocks.push(...inputBlocks);
@@ -314,24 +320,37 @@ async function runUserTurn(binding, { text, inputBlocks }) {
   });
 
   try {
-    await ensureBootstrapInjected(binding);
+    await ensureBootstrapInjected(latestBinding);
 
     const idempotencyKey = `openclaw-webchat-${Date.now()}-${cryptoId()}`;
     const startedAt = Date.now();
     const upstreamMessage = buildUpstreamMessage(userBlocks);
 
     await gatewayCall('chat.send', {
-      sessionKey: binding.upstreamSessionKey,
+      sessionKey: turnSnapshot.upstreamSessionKey,
       message: upstreamMessage,
       deliver: false,
       idempotencyKey
     });
 
-    const assistantRaw = await waitForAssistantReply(binding.upstreamSessionKey, {
+    const assistantRaw = await waitForAssistantReply(turnSnapshot.upstreamSessionKey, {
       minTimestampMs: startedAt,
       expectedUserText: upstreamMessage,
       timeoutMs: ASSISTANT_WAIT_TIMEOUT_MS
     });
+
+    if (!isBindingTurnCurrent(binding.agentId, turnSnapshot)) {
+      return {
+        message: presentHistoryEntry(normalizeHistoryRow({
+          id: cryptoId(),
+          agentId: binding.agentId,
+          sessionKey: binding.sessionKey,
+          role: 'assistant',
+          createdAt: new Date().toISOString(),
+          blocks: [{ type: 'text', text: '（上一轮回复已因上下文重置而忽略）' }]
+        }))
+      };
+    }
 
     const assistantBlocks = assistantRaw ? normalizeGatewayMessageToBlocks(assistantRaw) : [];
     const assistantMessage = normalizeHistoryRow({
@@ -355,10 +374,12 @@ async function runUserTurn(binding, { text, inputBlocks }) {
 
     return { message: presentHistoryEntry(assistantMessage) };
   } catch (error) {
-    patchBinding(binding.agentId, {
-      replyState: 'idle',
-      updatedAt: new Date().toISOString()
-    });
+    if (isBindingTurnCurrent(binding.agentId, turnSnapshot)) {
+      patchBinding(binding.agentId, {
+        replyState: 'idle',
+        updatedAt: new Date().toISOString()
+      });
+    }
     throw error;
   }
 }
@@ -371,8 +392,13 @@ async function runSlashCommand(binding, command) {
     throw new Error(`Unsupported slash command: ${command}`);
   }
 
-  await gatewayCall('sessions.reset', { key: binding.upstreamSessionKey });
+  const previousUpstreamSessionKey = binding.upstreamSessionKey;
+  await gatewayCall('sessions.reset', { key: previousUpstreamSessionKey });
+
+  const nextGeneration = createUpstreamGeneration();
   patchBinding(binding.agentId, {
+    upstreamGeneration: nextGeneration,
+    upstreamSessionKey: buildUpstreamSessionKey(binding.agentId, nextGeneration),
     bootstrapVersion: null,
     replyState: 'idle',
     updatedAt: new Date().toISOString()
@@ -407,11 +433,13 @@ function ensureBinding(agentId) {
   if (existing) return existing;
 
   const now = new Date().toISOString();
+  const upstreamGeneration = 'main';
   const created = {
     agentId,
     namespace: NAMESPACE,
     sessionKey: `${NAMESPACE}:${agentId}`,
-    upstreamSessionKey: buildUpstreamSessionKey(agentId),
+    upstreamGeneration,
+    upstreamSessionKey: buildUpstreamSessionKey(agentId, upstreamGeneration),
     bootstrapVersion: null,
     replyState: 'idle',
     createdAt: now,
@@ -460,8 +488,25 @@ async function ensureBootstrapInjected(binding) {
   });
 }
 
-function buildUpstreamSessionKey(agentId) {
-  return `agent:${agentId}:${NAMESPACE}:main`;
+function buildUpstreamSessionKey(agentId, generation = 'main') {
+  return `agent:${agentId}:${NAMESPACE}:${sanitizeSessionKeyPart(generation)}`;
+}
+
+function createUpstreamGeneration() {
+  return `reset-${Date.now()}-${cryptoId()}`;
+}
+
+function sanitizeSessionKeyPart(value) {
+  const normalized = String(value || 'main').trim().replace(/[^a-zA-Z0-9._-]+/g, '-');
+  return normalized || 'main';
+}
+
+function isBindingTurnCurrent(agentId, turnSnapshot) {
+  const latest = getBinding(agentId);
+  if (!latest) return false;
+  const latestGeneration = sanitizeSessionKeyPart(latest.upstreamGeneration || latest.upstreamSessionKey || 'main');
+  const expectedGeneration = sanitizeSessionKeyPart(turnSnapshot?.upstreamGeneration || turnSnapshot?.upstreamSessionKey || 'main');
+  return latest.upstreamSessionKey === turnSnapshot?.upstreamSessionKey && latestGeneration === expectedGeneration;
 }
 
 function buildUpstreamMessage(blocks) {

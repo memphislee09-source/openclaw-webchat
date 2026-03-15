@@ -57,6 +57,7 @@
 - [x] 实验分支补充视觉媒体气泡方案：图片 / 视频图文气泡按媒体实际渲染宽度等宽显示
 - [x] 桌面端视觉媒体气泡最大宽度提升到屏幕宽度 `70%`，同时避免放大小图
 - [x] 移动端视觉媒体气泡继续使用更窄上限，避免手机端过宽
+- [x] 修复 `/new` 后旧异步任务晚到回流污染新会话：reset 时轮换 upstream session key，并丢弃旧代次回包
 
 ## 仓库信息
 - 本地路径：`/Users/memphis/.openclaw/workspace-mira/openclaw-webchat`

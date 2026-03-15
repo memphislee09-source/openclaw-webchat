@@ -6,4 +6,5 @@
 - 前端脚本拼接错误 / 原因：多次局部编辑后 `public/app.js` 出现重复片段，触发 JS 语法错误 / 修复：重写 `public/app.js`，恢复单一入口与完整函数结构 / 预防措施：前端大改优先整文件覆盖，改后立即 `node --check public/app.js`
 - 发图轮次过早超时 / 原因：等待 assistant 最终回复窗口仅 25s，长耗时图片生成场景会先返回占位文案 / 修复：增加 `OPENCLAW_WEBCHAT_ASSISTANT_WAIT_TIMEOUT_MS`，默认提升到 120s / 预防措施：把长耗时媒体生成纳入自测与专项回归
 - gateway 临时断连 / 原因：`openclaw gateway call` 遇到 normal closure / connect failed 时会直接失败 / 修复：服务端增加 gateway 调用重试 / 预防措施：保留重试，并在验收时覆盖多 agent / 多轮发送场景
+- `/new` 后旧异步结果串入新会话 / 原因：上游 session key 固定为 `agent:<id>:openclaw-webchat:main`，reset 后晚到 completion 仍会落入当前 key；同时旧代次回包没有在接入层被丢弃 / 修复：`/new` 时轮换 upstream session key，并在服务端按代次忽略旧 key 的迟到回包 / 预防措施：自测新增断言，要求 `/new` 后 `upstreamSessionKey` 必须变化，避免再次把 reset 做成“同 key 清空”
 
