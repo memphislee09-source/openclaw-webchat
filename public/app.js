@@ -94,12 +94,6 @@ function bindEvents() {
   attachButtonEl.addEventListener('click', () => mediaUploadInputEl.click());
   mediaUploadInputEl.addEventListener('change', handleFileSelection);
   composerInputEl.addEventListener('input', autoResizeComposer);
-  composerInputEl.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      composerFormEl.requestSubmit();
-    }
-  });
 
   messageListEl.addEventListener('scroll', async () => {
     if (messageListEl.scrollTop > 64) return;
@@ -221,15 +215,33 @@ function renderAgentList() {
     name.className = 'agent-name';
     name.textContent = agent.name || agent.agentId;
 
+    const meta = document.createElement('div');
+    meta.className = 'agent-meta';
+
     const presence = document.createElement('span');
     presence.className = `presence-dot ${normalizePresence(agent.presence)}`;
+    presence.title = formatPresenceLabel(agent.presence);
+
+    const presenceLabel = document.createElement('span');
+    presenceLabel.className = 'agent-presence-label';
+    presenceLabel.textContent = formatPresenceLabel(agent.presence);
+
+    meta.append(presence, presenceLabel);
 
     const summary = document.createElement('div');
     summary.className = 'agent-summary';
     summary.textContent = agent.summary || '点击进入会话';
 
-    topRow.append(name, presence);
-    content.append(topRow, summary);
+    const bottomRow = document.createElement('div');
+    bottomRow.className = 'agent-bottom-row';
+
+    const time = document.createElement('div');
+    time.className = 'agent-time';
+    time.textContent = formatAgentTimestamp(agent.lastMessageAt);
+
+    bottomRow.append(summary, time);
+    topRow.append(name, meta);
+    content.append(topRow, bottomRow);
     button.append(avatar, content);
     agentListEl.append(button);
   }
@@ -1428,10 +1440,32 @@ function normalizePresence(value) {
   return value === 'running' || value === 'recent' ? value : 'idle';
 }
 
+function formatPresenceLabel(value) {
+  if (value === 'running') return '处理中';
+  if (value === 'recent') return '刚回复';
+  return '待命';
+}
+
 function formatTime(value) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return '';
   return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatAgentTimestamp(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+
+  const now = new Date();
+  const sameDay = date.getFullYear() === now.getFullYear()
+    && date.getMonth() === now.getMonth()
+    && date.getDate() === now.getDate();
+
+  if (sameDay) {
+    return formatTime(value);
+  }
+
+  return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 function formatBytes(value) {

@@ -28,6 +28,7 @@ async function checkPageShell() {
   assert(html.includes('id="agentList"'), 'page should contain agentList');
   assert(html.includes('id="messageList"'), 'page should contain messageList');
   assert(html.includes('id="composerInput"'), 'page should contain composerInput');
+  assert(html.includes('Enter 换行；点击发送提交'), 'page should reflect enter-to-newline composer hint');
   assert(html.includes('id="attachButton"'), 'page should contain attachButton');
   assert(html.includes('id="mediaUploadInput"'), 'page should contain mediaUploadInput');
   assert(html.includes('id="settingsPanel"'), 'page should contain settingsPanel');
@@ -45,7 +46,9 @@ async function checkPageShell() {
   assert(appJs.includes('async function cropAvatarToSquare'), 'app.js should include avatar crop flow');
   assert(appJs.includes('function openMediaViewer'), 'app.js should include image viewer flow');
   assert(appJs.includes('function handleMediaViewerPointerDown'), 'app.js should include image pan flow');
+  assert(appJs.includes('function formatPresenceLabel'), 'app.js should include sidebar presence label formatting');
   assert(css.includes('.agent-card'), 'styles.css should include agent-card styles');
+  assert(css.includes('.agent-bottom-row'), 'styles.css should include enhanced agent list layout');
   assert(css.includes('.pending-upload'), 'styles.css should include pending upload styles');
   assert(css.includes('.settings-panel'), 'styles.css should include settings panel styles');
   assert(css.includes('.settings-accordion'), 'styles.css should include accordion settings layout styles');

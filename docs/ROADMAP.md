@@ -1,7 +1,7 @@
 # Roadmap — openclaw-webchat
 
 ## 发布基线
-- [x] `0.1` 基线冻结（manifest 版本 `0.1.0`）
+- [x] `0.1.1` 基线冻结（manifest 版本 `0.1.1`）
 
 ## Milestone 0：需求冻结与方案确认（当前）
 - [x] 建立仓库与基础文档

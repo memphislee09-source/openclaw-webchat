@@ -192,12 +192,39 @@ button {
 .agent-top-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
+  min-width: 0;
+}
+
+.agent-meta,
+.agent-bottom-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-meta {
+  flex: none;
+  color: var(--muted);
+}
+
+.agent-presence-label,
+.agent-time {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.agent-bottom-row {
+  justify-content: space-between;
+  gap: 12px;
   min-width: 0;
 }
 
 .agent-summary {
   min-width: 0;
+  flex: 1;
   font-size: 13px;
   color: var(--muted);
   overflow: hidden;
@@ -987,6 +1014,20 @@ button {
   .composer-actions {
     justify-content: space-between;
     flex-wrap: wrap;
+  }
+
+  .agent-card {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .agent-meta {
+    gap: 6px;
+  }
+
+  .agent-presence-label {
+    max-width: 64px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .pending-upload {
