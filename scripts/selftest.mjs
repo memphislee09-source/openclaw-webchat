@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { groupMessageBlocksForRender, parseTextIntoBlocks } from '../public/message-blocks.js';
 
 const base = process.env.OPENCLAW_WEBCHAT_BASE || 'http://127.0.0.1:3770';
 const agentId = process.env.OPENCLAW_WEBCHAT_TEST_AGENT || 'mira';
@@ -15,6 +16,7 @@ const unique = `selftest-${Date.now()}`;
 await checkHealth();
 await checkCommandsCatalog();
 await checkPageShell();
+await checkMixedMediaParsing();
 await checkSettings();
 await checkAgents();
 await checkAgentProfile();
@@ -64,6 +66,7 @@ async function checkPageShell() {
   assert(appJs.includes('function formatPresenceLabel'), 'app.js should include sidebar presence label formatting');
   assert(appJs.includes('function renderMarkdownBlock'), 'app.js should include markdown bubble rendering');
   assert(appJs.includes("bubble.classList.add('visual-media-bubble')"), 'app.js should include responsive visual media bubble branch');
+  assert(appJs.includes('groupMessageBlocksForRender'), 'app.js should include shared block render grouping');
   assert(css.includes('.agent-card'), 'styles.css should include agent-card styles');
   assert(css.includes('.agent-bottom-row'), 'styles.css should include enhanced agent list layout');
   assert(css.includes('.command-menu'), 'styles.css should include slash command menu styles');
@@ -74,6 +77,41 @@ async function checkPageShell() {
   assert(css.includes('.settings-panel'), 'styles.css should include settings panel styles');
   assert(css.includes('.settings-accordion'), 'styles.css should include accordion settings layout styles');
   assert(css.includes('.media-viewer'), 'styles.css should include media viewer styles');
+}
+
+async function checkMixedMediaParsing() {
+  const raw = [
+    '第一条新闻',
+    '![封面图](https://example.com/cover.png)',
+    '正文里提到 MEDIA: 字段只是说明文字，不是媒体指令',
+    '第二条前缀 ![配图](https://example.com/news.jpg) 第二条后缀'
+  ].join('\n');
+  const blocks = parseTextIntoBlocks(raw);
+  assert(Array.isArray(blocks) && blocks.length === 5, 'mixed markdown image parsing should preserve five ordered blocks');
+
+  const summary = blocks.map((block) => `${block.type}:${block.type === 'text' ? block.text : block.source}`);
+  const expectedSummary = [
+    'text:第一条新闻',
+    'image:https://example.com/cover.png',
+    'text:正文里提到 MEDIA: 字段只是说明文字，不是媒体指令\n第二条前缀',
+    'image:https://example.com/news.jpg',
+    'text:第二条后缀'
+  ];
+  assert(JSON.stringify(summary) === JSON.stringify(expectedSummary), 'mixed markdown image parsing should keep text/media interleaving order');
+
+  const renderGroups = groupMessageBlocksForRender(blocks);
+  const renderSummary = renderGroups.map((group) => {
+    if (group.kind === 'text') return `text:${group.blocks.map((block) => block.text).join('|')}`;
+    return `${group.block.type}:${group.block.source || group.block.url || ''}`;
+  });
+  const expectedRenderSummary = [
+    'text:第一条新闻',
+    'image:https://example.com/cover.png',
+    'text:正文里提到 MEDIA: 字段只是说明文字，不是媒体指令\n第二条前缀',
+    'image:https://example.com/news.jpg',
+    'text:第二条后缀'
+  ];
+  assert(JSON.stringify(renderSummary) === JSON.stringify(expectedRenderSummary), 'render grouping should preserve the original block order');
 }
 
 async function checkSettings() {

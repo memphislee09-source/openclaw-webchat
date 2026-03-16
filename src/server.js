@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { execFile, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
+import { parseTextIntoBlocks } from '../public/message-blocks.js';
 
 const execFileAsync = promisify(execFile);
 const __filename = fileURLToPath(import.meta.url);
@@ -22,7 +23,7 @@ const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 const MEDIA_SECRET = process.env.OPENCLAW_WEBCHAT_MEDIA_SECRET || 'openclaw-webchat-local-secret';
 const HISTORY_PAGE_LIMIT_MAX = 200;
 const NAMESPACE = 'openclaw-webchat';
-const BOOTSTRAP_VERSION = '2026-03-15.phase1';
+const BOOTSTRAP_VERSION = '2026-03-16.phase2';
 const ACTIVE_RECENT_WINDOW_MS = 5 * 60 * 1000;
 const ASSISTANT_WAIT_TIMEOUT_MS = Number(process.env.OPENCLAW_WEBCHAT_ASSISTANT_WAIT_TIMEOUT_MS || 120000);
 const ASSISTANT_LATE_REPLY_TIMEOUT_MS = Number(process.env.OPENCLAW_WEBCHAT_LATE_REPLY_TIMEOUT_MS || 10 * 60 * 1000);
@@ -59,7 +60,12 @@ const SLASH_COMMAND_DEFS = [
 ];
 
 app.use(express.json({ limit: '25mb' }));
-app.use('/static', express.static(path.resolve(__dirname, '../public')));
+app.use('/static', express.static(path.resolve(__dirname, '../public'), {
+  etag: true,
+  setHeaders(res) {
+    res.setHeader('Cache-Control', 'no-store, must-revalidate');
+  }
+}));
 
 ensureDir(DATA_DIR);
 ensureDir(HISTORY_DIR);
@@ -310,6 +316,7 @@ app.get('/api/openclaw-webchat/media', (req, res) => {
 });
 
 app.get('*', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store, must-revalidate');
   res.sendFile(path.resolve(__dirname, '../public/index.html'));
 });
 
@@ -1128,146 +1135,6 @@ function normalizeMediaLikeItem(item) {
     source: cleanMediaValue(source),
     name: normalizeOptionalString(item?.name || item?.filename || item?.fileName) || undefined
   };
-}
-
-function parseTextIntoBlocks(rawText) {
-  const text = String(rawText || '').trim();
-  if (!text) return [];
-
-  const blocks = [];
-  const pendingTextLines = [];
-  const flushPendingText = () => {
-    const cleanText = pendingTextLines.join('\n').trim();
-    pendingTextLines.length = 0;
-    if (cleanText) blocks.push({ type: 'text', text: cleanText });
-  };
-
-  for (const originalLine of text.split('\n')) {
-    const line = String(originalLine || '').trim();
-    if (!line) {
-      pendingTextLines.push('');
-      continue;
-    }
-
-    const unbulleted = line.replace(/^[-*•]\s*/, '').trim();
-    const textDirective = unbulleted.match(/^text\s*[:：]\s*(.+)$/i);
-    if (textDirective?.[1]) {
-      pendingTextLines.push(textDirective[1].trim());
-      continue;
-    }
-
-    const directiveMedia = parseStandaloneMediaDirective(unbulleted);
-    if (directiveMedia) {
-      flushPendingText();
-      blocks.push(buildMediaBlock(directiveMedia));
-      continue;
-    }
-
-    const mixedDirective = parseMixedMediaDirective(unbulleted);
-    if (mixedDirective) {
-      const before = mixedDirective.before.trim();
-      if (before) pendingTextLines.push(before);
-      flushPendingText();
-      blocks.push(buildMediaBlock(mixedDirective.source));
-      continue;
-    }
-
-    const segments = extractMarkdownImageSegments(unbulleted);
-    if (!segments.length) {
-      pendingTextLines.push(unbulleted.replace(/^[\]\s]+/, '').trim());
-      continue;
-    }
-
-    for (const segment of segments) {
-      if (segment.type === 'text') {
-        if (segment.text) pendingTextLines.push(segment.text);
-        continue;
-      }
-      flushPendingText();
-      blocks.push(buildMediaBlock(segment.source, segment.alt));
-    }
-  }
-
-  flushPendingText();
-  return dedupeBlocks(blocks);
-}
-
-function parseStandaloneMediaDirective(line) {
-  const mediaMatch = line.match(/^mediaUrl\s*[:：]\s*(.+)$/i);
-  if (mediaMatch?.[1]) {
-    const source = cleanMediaValue(mediaMatch[1]);
-    return isLikelyMediaSource(source) ? source : null;
-  }
-
-  const mediaDirective = line.match(/^MEDIA\s*:\s*(.+)$/);
-  if (mediaDirective?.[1]) {
-    const source = cleanMediaValue(mediaDirective[1]);
-    return isLikelyMediaSource(source) ? source : null;
-  }
-
-  return null;
-}
-
-function parseMixedMediaDirective(line) {
-  const mixedMedia = line.match(/^(.*?)(?:\s+)?mediaUrl\s*[:：]\s*(.+)$/i);
-  if (mixedMedia?.[2]) {
-    const source = cleanMediaValue(mixedMedia[2]);
-    if (isLikelyMediaSource(source)) {
-      return { before: mixedMedia[1] || '', source };
-    }
-  }
-
-  const mixedDirective = line.match(/^(.*?)(?:\s+)?MEDIA\s*:\s*(.+)$/);
-  if (mixedDirective?.[2]) {
-    const source = cleanMediaValue(mixedDirective[2]);
-    if (isLikelyMediaSource(source)) {
-      return { before: mixedDirective[1] || '', source };
-    }
-  }
-
-  return null;
-}
-
-function extractMarkdownImageSegments(line) {
-  const pattern = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
-  const segments = [];
-  let cursor = 0;
-  let match;
-
-  while ((match = pattern.exec(line))) {
-    const before = line.slice(cursor, match.index).trim();
-    if (before) segments.push({ type: 'text', text: before });
-
-    const source = cleanMediaValue(match[2]);
-    if (isLikelyMediaSource(source)) {
-      segments.push({ type: 'media', source, alt: normalizeOptionalString(match[1]) || undefined });
-    } else {
-      segments.push({ type: 'text', text: match[0] });
-    }
-    cursor = pattern.lastIndex;
-  }
-
-  const after = line.slice(cursor).trim();
-  if (after) segments.push({ type: 'text', text: after });
-
-  return segments;
-}
-
-function buildMediaBlock(source, name) {
-  return {
-    type: guessMediaTypeByPath(source),
-    source,
-    name: normalizeOptionalString(name) || path.basename(source)
-  };
-}
-
-function isLikelyMediaSource(value) {
-  const source = String(value || '').trim();
-  if (!source) return false;
-  if (/^https?:\/\//i.test(source)) return true;
-  if (/^(\/|\.{1,2}\/|~\/)/.test(source)) return true;
-  if (/^[a-zA-Z]:[\\/]/.test(source)) return true;
-  return false;
 }
 
 function normalizeInputBlocks(value) {

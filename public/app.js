@@ -1,3 +1,5 @@
+import { groupMessageBlocksForRender } from './message-blocks.js';
+
 const state = {
   agents: [],
   activeAgentId: null,
@@ -103,7 +105,6 @@ function bindEvents() {
   attachButtonEl.addEventListener('click', () => mediaUploadInputEl.click());
   mediaUploadInputEl.addEventListener('change', handleFileSelection);
   composerInputEl.addEventListener('input', autoResizeComposer);
-
   messageListEl.addEventListener('scroll', async () => {
     if (messageListEl.scrollTop > 64) return;
     if (!state.activeAgentId || !state.hasMore || state.loadingHistory) return;
@@ -365,29 +366,21 @@ function renderMessages() {
       bubble.classList.add('visual-media-bubble');
     }
 
-    let textWrap = null;
-    const flushTextWrap = () => {
-      if (!textWrap || !textWrap.childNodes.length) return;
-      bubble.append(textWrap);
-      textWrap = null;
-    };
-
-    for (const block of blocks) {
-      if (block.type === 'text') {
-        if (!textWrap) {
-          textWrap = document.createElement('div');
-          textWrap.className = 'message-text-stack';
-        }
-        textWrap.append(renderMarkdownBlock(block.text || ''));
+    for (const group of groupMessageBlocksForRender(blocks)) {
+      if (group.kind === 'text') {
+        const textWrap = document.createElement('div');
+        textWrap.className = 'message-text-stack';
+        group.blocks.forEach((block) => {
+          textWrap.append(renderMarkdownBlock(block.text || ''));
+        });
+        bubble.append(textWrap);
         continue;
       }
 
-      flushTextWrap();
-
-      const mediaNode = renderMediaBlock(block, bubble);
+      const mediaNode = renderMediaBlock(group.block, bubble);
       if (!mediaNode) continue;
 
-      if (block.type === 'image' || block.type === 'video') {
+      if (group.block.type === 'image' || group.block.type === 'video') {
         const mediaWrap = document.createElement('div');
         mediaWrap.className = 'message-media visual-media';
         mediaWrap.append(mediaNode);
@@ -397,8 +390,6 @@ function renderMessages() {
 
       bubble.append(mediaNode);
     }
-
-    flushTextWrap();
 
     const time = document.createElement('div');
     time.className = 'message-time';
