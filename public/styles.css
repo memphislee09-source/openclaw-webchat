@@ -21,6 +21,10 @@
   box-sizing: border-box;
 }
 
+.hidden {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
@@ -874,6 +878,95 @@ button {
   border-color: rgba(59, 130, 246, 0.45);
 }
 
+.command-picker {
+  position: relative;
+}
+
+.command-trigger {
+  min-width: 48px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.command-trigger[aria-expanded="true"] {
+  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(59, 130, 246, 0.14);
+  color: #bfdbfe;
+}
+
+.command-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 12px);
+  width: min(320px, calc(100vw - 32px));
+  padding: 12px;
+  border-radius: 20px;
+  border: 1px solid var(--line-strong);
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(11, 16, 32, 0.98)),
+    rgba(11, 16, 32, 0.96);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(18px);
+  display: grid;
+  gap: 10px;
+  z-index: 8;
+}
+
+.command-menu-section {
+  display: grid;
+  gap: 6px;
+}
+
+.command-menu-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(191, 219, 254, 0.72);
+  padding: 2px 6px 0;
+}
+
+.command-item {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  text-align: left;
+  display: grid;
+  gap: 4px;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.command-item:hover,
+.command-item:focus-visible {
+  border-color: rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.12);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.command-item-command {
+  font-family: "SFMono-Regular", ui-monospace, "JetBrains Mono", monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #dbeafe;
+}
+
+.command-item-desc,
+.command-menu-empty {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.command-menu-empty {
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .sidebar-backdrop,
 .settings-backdrop {
   position: fixed;
@@ -1163,6 +1256,11 @@ button {
   .composer-actions {
     justify-content: space-between;
     flex-wrap: wrap;
+  }
+
+  .command-menu {
+    right: auto;
+    left: 0;
   }
 
   .message-row.visual-media-row {

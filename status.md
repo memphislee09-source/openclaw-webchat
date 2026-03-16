@@ -4,7 +4,7 @@
 - 项目名：openclaw-webchat
 - 当前版本：`0.1.1`（manifest: `0.1.1`）
 - 目标：构建独立于默认 WebUI 的 OpenClaw WebChat 项目，强化历史保留与富媒体体验。
-- 当前状态：`0.1.1` 基线已完成；实验分支继续验证图片 / 视频气泡等宽方案
+- 当前状态：`0.1.1` 基线已完成；实验分支已补齐 slash 命令按钮、本地命令菜单与本地 slash 执行语义，并继续验证图片 / 视频气泡等宽方案
 
 ## 本次会话进展
 - [x] 创建项目目录
@@ -58,6 +58,12 @@
 - [x] 桌面端视觉媒体气泡最大宽度提升到屏幕宽度 `70%`，同时避免放大小图
 - [x] 移动端视觉媒体气泡继续使用更窄上限，避免手机端过宽
 - [x] 修复 `/new` 后旧异步任务晚到回流污染新会话：reset 时轮换 upstream session key，并丢弃旧代次回包
+- [x] 输入框右侧 `/new` 按钮已替换为 `/` slash 按钮，并接入常用命令菜单
+- [x] 新增 `/api/openclaw-webchat/commands`，前端可拉取 slash 命令目录与白名单
+- [x] `src/server.js` 已补齐本地 slash 执行：`/new`、`/reset`、`/model`、`/models`、`/think`、`/fast`、`/verbose`、`/compact`、`/help`
+- [x] `public/app.js` 已改为“仅白名单 slash 命令拦截到 `/command` 接口，未知 slash 仍按普通消息发送”
+- [x] 自测已新增 slash 回归：命令目录、slash 按钮 / 菜单骨架、`/model`、`/think`、`/new`
+- [x] 已重启 `3770` 服务并跑通 `node scripts/selftest.mjs`（`SELFTEST_OK`）
 
 ## 仓库信息
 - 本地路径：`/Users/memphis/.openclaw/workspace-mira/openclaw-webchat`
@@ -77,6 +83,8 @@
 - 视频直接显示在消息气泡中，使用原生控件处理播放与全屏
 - 对话气泡支持标题、列表、引用、代码块、链接等常用 Markdown 渲染
 - 实验分支中，图片 / 视频图文气泡宽度由媒体实际显示宽度决定，桌面端最大到 `70vw`
+- 输入框右侧提供 `/` slash 菜单按钮；至少支持 `/new`、`/model`、`/think`，并补齐 `/fast`、`/verbose`、`/compact`、`/help`
+- slash 命令采用本地执行语义：白名单命令走本地 `/command` 接口，未知 slash 继续按普通消息发送给 agent
 - 设置面板支持统一管理用户自己和所有 agent 的显示名 / 头像
 - 头像支持本地图片选择、正方形裁剪与上传保存
 - 设置面板采用可收起的展开式结构，可继续扩展语种、主题等偏好设置
@@ -90,6 +98,6 @@
 
 ## 下一步
 1. 继续人工对比视觉媒体等宽方案在不同 agent 内容下的显示效果
-2. assistant 图片/音频/视频/文件渲染细节与异常态继续打磨
-3. 更完整的移动端与多 agent 回归验证
+2. slash 命令与原生 OpenClaw WebUI 的细节继续人工对比，确认 `/model status`、错误提示文案等边缘行为
+3. 更完整的移动端与多 agent 回归验证，重点看 slash 菜单在窄屏下的展开与关闭体验
 4. 音频转写成功链路补一轮人工验收（当前自测只覆盖音频上传，不强依赖本地 Whisper 完成）

@@ -10,6 +10,8 @@ const state = {
   sending: false,
   pollingTimer: null,
   selectedOpenPromise: null,
+  commandCatalog: [],
+  allowedCommands: new Set(),
   settingsOpen: false,
   settingsExpandedSection: null,
   settingsSelectedContactKey: null,
@@ -43,6 +45,7 @@ const composerFormEl = document.getElementById('composerForm');
 const composerInputEl = document.getElementById('composerInput');
 const sendButtonEl = document.getElementById('sendButton');
 const newContextButtonEl = document.getElementById('newContextButton');
+const commandMenuEl = document.getElementById('commandMenu');
 const attachButtonEl = document.getElementById('attachButton');
 const mediaUploadInputEl = document.getElementById('mediaUploadInput');
 const pendingUploadsEl = document.getElementById('pendingUploads');
@@ -81,14 +84,19 @@ boot().catch((error) => showStatus(`初始化失败：${formatError(error)}`, 'e
 async function boot() {
   bindEvents();
   autoResizeComposer();
-  await loadSettings();
+  await Promise.all([
+    loadSettings(),
+    loadCommandCatalog()
+  ]);
   await refreshAgents({ autoOpen: true });
   startPolling();
 }
 
 function bindEvents() {
   composerFormEl.addEventListener('submit', handleSendSubmit);
-  newContextButtonEl.addEventListener('click', handleNewContext);
+  newContextButtonEl.addEventListener('click', toggleCommandMenu);
+  commandMenuEl?.addEventListener('click', handleCommandMenuClick);
+  document.addEventListener('click', handleOutsideCommandMenuClick);
   headerRefreshButtonEl.addEventListener('click', () => refreshAgents({ autoOpen: false, refreshCurrent: true }));
   refreshAgentsButtonEl?.addEventListener('click', () => refreshAgents({ autoOpen: false, refreshCurrent: true }));
   attachButtonEl.addEventListener('click', () => mediaUploadInputEl.click());
@@ -565,8 +573,13 @@ async function handleSendSubmit(event) {
 
   const text = composerInputEl.value.trim();
   if (!text && !state.pendingUploads.length) return;
-  if (text === '/new' && !state.pendingUploads.length) {
-    await handleNewContext();
+
+  const slashName = getSlashCommandName(text);
+  if (text && !state.pendingUploads.length && isWhitelistedSlash(slashName)) {
+    composerInputEl.value = '';
+    autoResizeComposer();
+    closeCommandMenu();
+    await executeSlashCommand(text);
     return;
   }
 
@@ -663,26 +676,192 @@ async function handleFileSelection(event) {
   scrollMessagesToBottom();
 }
 
-async function handleNewContext() {
+async function loadCommandCatalog() {
+  try {
+    const payload = await apiGet('/api/openclaw-webchat/commands');
+    state.commandCatalog = Array.isArray(payload?.commands) ? payload.commands : [];
+    const allowed = Array.isArray(payload?.allowed) && payload.allowed.length
+      ? payload.allowed
+      : state.commandCatalog.map((item) => item?.name);
+    state.allowedCommands = new Set(allowed.map(normalizeSlashCommandName).filter(Boolean));
+  } catch {
+    state.commandCatalog = getDefaultCommandCatalog();
+    state.allowedCommands = new Set(state.commandCatalog.map((item) => normalizeSlashCommandName(item.name)).filter(Boolean));
+  }
+
+  renderCommandMenu();
+}
+
+function getDefaultCommandCatalog() {
+  return [
+    { name: '/new', description: '重置上游上下文并保留本地历史' },
+    { name: '/reset', description: '等同 /new' },
+    { name: '/model', description: '查看或设置当前模型', args: '<name>' },
+    { name: '/models', description: '查看可用模型列表（/model 别名）', args: '<name>' },
+    { name: '/think', description: '查看或设置 thinking level', args: '<level>' },
+    { name: '/fast', description: '查看或设置 fast mode', args: '<status|on|off>' },
+    { name: '/verbose', description: '查看或设置 verbose level', args: '<on|off|full>' },
+    { name: '/compact', description: '压缩当前上游 session transcript' },
+    { name: '/help', description: '显示本地 slash 命令帮助' }
+  ];
+}
+
+function renderCommandMenu() {
+  if (!commandMenuEl) return;
+  commandMenuEl.innerHTML = '';
+
+  const commands = sortCommandCatalog(state.commandCatalog.length ? state.commandCatalog : getDefaultCommandCatalog());
+  const visibleCommands = commands.filter((item) => isWhitelistedSlash(item?.name));
+
+  if (!visibleCommands.length) {
+    const empty = document.createElement('div');
+    empty.className = 'command-menu-empty';
+    empty.textContent = '当前没有可用本地命令';
+    commandMenuEl.append(empty);
+    return;
+  }
+
+  for (const [category, items] of Object.entries(groupCommandCatalog(visibleCommands))) {
+    if (!items.length) continue;
+
+    const section = document.createElement('section');
+    section.className = 'command-menu-section';
+
+    const title = document.createElement('div');
+    title.className = 'command-menu-title';
+    title.textContent = getCommandCategoryLabel(category);
+    section.append(title);
+
+    for (const item of items) {
+      section.append(createCommandMenuItem(item));
+    }
+
+    commandMenuEl.append(section);
+  }
+}
+
+function toggleCommandMenu(event) {
+  event?.stopPropagation?.();
+  setCommandMenuOpen(commandMenuEl?.classList.contains('hidden'));
+}
+
+function closeCommandMenu() {
+  setCommandMenuOpen(false);
+}
+
+async function handleCommandMenuClick(event) {
+  const button = event.target.closest('[data-command]');
+  if (!button) return;
+  const command = button.dataset.command;
+  if (!command) return;
+  closeCommandMenu();
+  await executeSlashCommand(command);
+}
+
+function handleOutsideCommandMenuClick(event) {
+  if (!commandMenuEl || commandMenuEl.classList.contains('hidden')) return;
+  if (commandMenuEl.contains(event.target) || newContextButtonEl.contains(event.target)) return;
+  closeCommandMenu();
+}
+
+function setCommandMenuOpen(open) {
+  if (!commandMenuEl) return;
+  commandMenuEl.classList.toggle('hidden', !open);
+  newContextButtonEl?.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function createCommandMenuItem(item) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'command-item';
+  button.dataset.command = item.name;
+
+  const title = document.createElement('span');
+  title.className = 'command-item-command';
+  title.textContent = item.args ? `${item.name} ${item.args}` : item.name;
+
+  const desc = document.createElement('span');
+  desc.className = 'command-item-desc';
+  desc.textContent = item.description || '';
+
+  button.append(title, desc);
+  return button;
+}
+
+function groupCommandCatalog(commands) {
+  const grouped = {
+    session: [],
+    model: [],
+    tools: []
+  };
+
+  for (const item of commands) {
+    const category = grouped[item?.category] ? item.category : 'tools';
+    grouped[category].push(item);
+  }
+
+  return grouped;
+}
+
+function sortCommandCatalog(commands) {
+  const categoryWeight = { session: 0, model: 1, tools: 2 };
+  return [...commands].sort((left, right) => {
+    const leftWeight = categoryWeight[left?.category] ?? 9;
+    const rightWeight = categoryWeight[right?.category] ?? 9;
+    if (leftWeight !== rightWeight) return leftWeight - rightWeight;
+    return String(left?.name || '').localeCompare(String(right?.name || ''));
+  });
+}
+
+function getCommandCategoryLabel(category) {
+  if (category === 'session') return 'Session';
+  if (category === 'model') return 'Model';
+  return 'Tools';
+}
+
+async function executeSlashCommand(command) {
   if (!state.activeSessionKey || state.sending) return;
   state.sending = true;
   setComposerEnabled(false);
-  showStatus('正在重置上游上下文…', 'info');
+  showStatus(`正在执行 ${command.split(/\s+/, 1)[0]}…`, 'info');
 
   try {
-    const response = await apiPost(`/api/openclaw-webchat/sessions/${encodeURIComponent(state.activeSessionKey)}/command`, { command: '/new' });
+    const response = await apiPost(`/api/openclaw-webchat/sessions/${encodeURIComponent(state.activeSessionKey)}/command`, { command });
     if (response?.message) state.messages.push(response.message);
     renderMessages();
     scrollMessagesToBottom();
-    showStatus('上游上下文已重置，本地历史已保留。', 'success');
+    showStatus(buildSlashCommandSuccessMessage(command), 'success');
     await refreshAgents({ autoOpen: false });
   } catch (error) {
-    showStatus(`重置失败：${formatError(error)}`, 'error');
+    showStatus(`命令失败：${formatError(error)}`, 'error');
   } finally {
     state.sending = false;
     setComposerEnabled(true);
     renderMessages();
   }
+}
+
+function buildSlashCommandSuccessMessage(command) {
+  const name = getSlashCommandName(command);
+  if (name === '/new' || name === '/reset') return '上游上下文已重置，本地历史已保留。';
+  if (name === '/compact') return '压缩命令已执行。';
+  return `${name} 已执行。`;
+}
+
+function normalizeSlashCommandName(command) {
+  const raw = String(command || '').trim().toLowerCase();
+  if (!raw) return '';
+  return raw.startsWith('/') ? raw : `/${raw}`;
+}
+
+function getSlashCommandName(text) {
+  const parsed = String(text || '').trim().match(/^\/([^\s:]+)(?:\s*:?\s*.*)?$/u);
+  if (!parsed) return '';
+  return normalizeSlashCommandName(parsed[1]);
+}
+
+function isWhitelistedSlash(commandName) {
+  return state.allowedCommands.has(normalizeSlashCommandName(commandName));
 }
 
 function updateHeader() {
@@ -1272,6 +1451,10 @@ function handleWindowKeydown(event) {
     closeMediaViewer();
     return;
   }
+
+  if (event.key === 'Escape') {
+    closeCommandMenu();
+  }
 }
 
 function detectAttachmentKind(file) {
@@ -1589,6 +1772,7 @@ function setComposerEnabled(enabled) {
   newContextButtonEl.disabled = !enabled;
   attachButtonEl.disabled = !enabled;
   mediaUploadInputEl.disabled = !enabled;
+  if (!enabled) closeCommandMenu();
   renderPendingUploads();
 }
 
