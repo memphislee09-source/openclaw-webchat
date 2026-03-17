@@ -56,6 +56,7 @@ async function checkPageShell() {
   assert(html.includes('id="settingsThemePresetButtons"'), 'page should contain theme preset selector');
   assert(html.includes('id="settingsThemeDarkButton"'), 'page should contain dark theme button');
   assert(html.includes('id="settingsThemePaperButton"'), 'page should contain paper theme button');
+  assert(html.includes('id="settingsThemeGrayButton"'), 'page should contain gray theme button');
   assert(html.includes('id="settingsThemeLinenButton"'), 'page should contain linen theme button');
   assert(html.includes('id="settingsThemeMistButton"'), 'page should contain mist theme button');
   assert(html.includes('id="settingsThemeSandButton"'), 'page should contain sand theme button');
@@ -95,6 +96,7 @@ async function checkPageShell() {
   assert(css.includes('.theme-preset-grid'), 'styles.css should include theme preset grid styles');
   assert(css.includes('.theme-preset-card'), 'styles.css should include theme preset card styles');
   assert(css.includes(':root[data-theme="light-paper"]'), 'styles.css should include paper light theme tokens');
+  assert(css.includes(':root[data-theme="light-gray"]'), 'styles.css should include gray light theme tokens');
   assert(css.includes(':root[data-theme="light-linen"]'), 'styles.css should include linen light theme tokens');
   assert(css.includes(':root[data-theme="light-mist"]'), 'styles.css should include mist light theme tokens');
   assert(css.includes(':root[data-theme="light-sand"]'), 'styles.css should include sand light theme tokens');

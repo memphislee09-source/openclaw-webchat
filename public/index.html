@@ -9,6 +9,7 @@
         const nextThemeChoice = (stored) => {
           if (stored === 'dark') return 'dark';
           if (stored === 'light-paper') return 'light-paper';
+          if (stored === 'light-gray') return 'light-gray';
           if (stored === 'light-linen') return 'light-linen';
           if (stored === 'light-mist') return 'light-mist';
           if (stored === 'light-sand') return 'light-sand';
@@ -29,7 +30,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/static/styles.css?v=20260317-theme2" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260317-theme3" />
   </head>
   <body>
     <div class="app-shell">
@@ -208,6 +209,19 @@
                           <span class="theme-preset-copy">顶部有一点杏桃暖光，保留轻微色彩变化。</span>
                         </button>
 
+                        <button class="theme-preset-card" id="settingsThemeGrayButton" type="button" data-theme-choice="light-gray" aria-pressed="false">
+                          <span class="theme-preset-header">
+                            <span class="theme-preset-name">Soft Gray</span>
+                            <span class="theme-preset-tag">E</span>
+                          </span>
+                          <span class="theme-preset-preview theme-preview-gray" aria-hidden="true">
+                            <span class="theme-preview-sidebar"></span>
+                            <span class="theme-preview-panel"></span>
+                            <span class="theme-preview-bubble"></span>
+                          </span>
+                          <span class="theme-preset-copy">中性浅灰，更安静，几乎不带额外色偏。</span>
+                        </button>
+
                         <button class="theme-preset-card" id="settingsThemeLinenButton" type="button" data-theme-choice="light-linen" aria-pressed="false">
                           <span class="theme-preset-header">
                             <span class="theme-preset-name">Warm Linen</span>
@@ -280,6 +294,6 @@
       <div class="message-text"></div>
     </template>
 
-    <script type="module" src="/static/app.js?v=20260317-theme2"></script>
+    <script type="module" src="/static/app.js?v=20260317-theme3"></script>
   </body>
 </html>
