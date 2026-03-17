@@ -23,6 +23,7 @@
   - 首屏历史 `15` 条的移动端实验参数
   - 头像持久化修复：保存稳定源路径，读取时动态签发媒体地址
   - 设置页偏好分区支持 1 套深色 + 4 套浅色主题预设切换，并在当前浏览器持久化主题偏好
+  - 对话气泡阴影已单独收紧，浅色主题只保留轻微层次，减少“气泡漂浮”分散感
 
 ## 已完成能力
 - 独立命名空间与 API：`/api/openclaw-webchat/*`
@@ -41,6 +42,7 @@
 - 左右栏独立滚动
 - 设置面板：统一联系人管理、显示名/头像编辑、头像本地裁剪上传
 - 偏好设置：1 套深色 + 4 套浅色主题预设切换与浏览器本地持久化
+- 对话气泡阴影分层：消息气泡使用更轻的专用阴影，不复用全站大阴影
 - agent / 用户头像持久化防过期
 - gateway 断连重试与长耗时回复等待增强
 
@@ -53,9 +55,9 @@
 - `docs/HANDOFF-2026-03-17.md`：当前交接摘要
 
 ## 最近主线变更
+- `f27a1d4` `feat: add theme preset variants`
+- `dcfbe64` `feat: add light theme toggle`
 - `932bdcd` `docs: record avatar persistence fix`
-- `4e518ce` `fix: keep avatar images from expiring`
-- `8f57417` `merge: release 0.1.2 mainline baseline`
 
 ## 分支状态
 - 当前开发基点：`main`
