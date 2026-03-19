@@ -2,16 +2,453 @@ import { groupMessageBlocksForRender } from './message-blocks.js';
 
 const THEME_STORAGE_KEY = 'openclaw-webchat-theme-choice';
 const LEGACY_THEME_MODE_STORAGE_KEY = 'openclaw-webchat-theme-mode';
+const LANGUAGE_STORAGE_KEY = 'openclaw-webchat-language';
 const HISTORY_SEARCH_RECENTS_STORAGE_KEY = 'openclaw-webchat-history-search-recents';
 const HISTORY_SEARCH_MAX_RECENTS = 8;
 const SETTINGS_SECTIONS = ['contacts', 'preferences', 'access', 'about', 'manual-start'];
+const SUPPORTED_LANGUAGES = ['zh-CN', 'en'];
 const THEME_PRESETS = {
-  dark: { name: '深色', mode: 'dark', hint: '夜间更稳，更适合低光环境。' },
-  'light-paper': { name: 'Dawn Peach', mode: 'light', hint: '顶部带一点杏桃暖光，保留轻微色彩变化。' },
-  'light-gray': { name: 'Soft Gray', mode: 'light', hint: '中性浅灰，更安静，几乎不带额外色偏。' },
-  'light-linen': { name: 'Warm Linen', mode: 'light', hint: '微暖的亚麻纸感，柔和但不显脏。' },
-  'light-mist': { name: 'Mist Blue', mode: 'light', hint: '偏冷静的蓝灰，工具感更强。' },
-  'light-sand': { name: 'Soft Sand', mode: 'light', hint: '最放松的浅暖中性，存在感很轻。' }
+  dark: {
+    mode: 'dark',
+    tag: { 'zh-CN': '默认', en: 'Default' },
+    name: { 'zh-CN': '深色', en: 'Dark' },
+    hint: { 'zh-CN': '夜间更稳，更适合低光环境。', en: 'More stable at night and better in low-light environments.' }
+  },
+  'light-paper': {
+    mode: 'light',
+    tag: { 'zh-CN': 'A', en: 'A' },
+    name: { 'zh-CN': 'Dawn Peach', en: 'Dawn Peach' },
+    hint: { 'zh-CN': '顶部带一点杏桃暖光，保留轻微色彩变化。', en: 'A touch of peach warmth near the top with subtle color variation.' }
+  },
+  'light-gray': {
+    mode: 'light',
+    tag: { 'zh-CN': 'E', en: 'E' },
+    name: { 'zh-CN': 'Soft Gray', en: 'Soft Gray' },
+    hint: { 'zh-CN': '中性浅灰，更安静，几乎不带额外色偏。', en: 'A quieter neutral gray with almost no extra color cast.' }
+  },
+  'light-linen': {
+    mode: 'light',
+    tag: { 'zh-CN': 'B', en: 'B' },
+    name: { 'zh-CN': 'Warm Linen', en: 'Warm Linen' },
+    hint: { 'zh-CN': '微暖的亚麻纸感，柔和但不显脏。', en: 'A soft warm linen-paper feel without looking muddy.' }
+  },
+  'light-mist': {
+    mode: 'light',
+    tag: { 'zh-CN': 'C', en: 'C' },
+    name: { 'zh-CN': 'Mist Blue', en: 'Mist Blue' },
+    hint: { 'zh-CN': '偏冷静的蓝灰，工具感更强。', en: 'A calmer blue-gray with a more tool-like feel.' }
+  },
+  'light-sand': {
+    mode: 'light',
+    tag: { 'zh-CN': 'D', en: 'D' },
+    name: { 'zh-CN': 'Soft Sand', en: 'Soft Sand' },
+    hint: { 'zh-CN': '最放松的浅暖中性，存在感很轻。', en: 'The softest warm neutral with a very light presence.' }
+  }
+};
+
+const I18N = {
+  'zh-CN': {
+    ui: {
+      closeSidebar: '关闭侧栏',
+      refresh: '刷新',
+      openSettings: '打开设置',
+      openSidebar: '打开侧栏',
+      selectAgent: '选择 agent 开始聊天',
+      searchHistory: '搜索当前会话历史',
+      search: '搜索',
+      historySearch: '历史搜索',
+      composerPlaceholder: '输入消息，Enter 换行；点 / 按钮或直接输入 slash 命令可执行本地命令',
+      attachMedia: '上传图片或音频',
+      openSlashMenu: '打开 slash 命令菜单',
+      send: '发送',
+      workspaceSettings: 'Workspace Settings',
+      settings: '设置',
+      closeSettings: '关闭设置',
+      contacts: '联系人',
+      appearance: '外观',
+      accessAndSecurity: '访问与安全',
+      about: '关于',
+      manualStart: '手动启动服务',
+      language: '界面语种',
+      languageHint: '语种偏好会保存在当前浏览器。',
+      themeHintStored: '主题偏好会保存在当前浏览器。',
+      comingSoonStructure: '设置面板已按展开式分区组织，后续继续加项目时不需要再重做结构。',
+      localOnly: '仅本机',
+      lanTailscale: '局域网 / Tailscale',
+      enableLightAuth: '启用可选轻认证',
+      accessPassword: '访问口令',
+      confirmAccessPassword: '确认访问口令',
+      saveAccessSettings: '保存访问设置',
+      logoutAuth: '当前浏览器退出认证',
+      restartService: '重启服务',
+      projectLinks: '项目链接',
+      githubRepo: 'GitHub 仓库',
+      manualStartTitle: '手动启动服务',
+      stepProjectDir: '1. 项目目录',
+      stepInstall: '2. 首次安装依赖',
+      stepStart: '3. 启动服务',
+      stepRestart: '4. 已注册 LaunchAgent 时可直接重启',
+      zoomOut: '缩小',
+      resetZoom: '重置缩放',
+      zoomIn: '放大',
+      imagePreview: '图片预览',
+      accessGate: 'Access Gate',
+      enterPassword: '输入访问口令',
+      enterWebChat: '进入 WebChat',
+      serviceRestart: 'Service Restart',
+      serviceRestarting: '服务正在重启',
+      theme: '界面主题'
+    },
+    text: {
+      contactsIntro: '统一管理用户自己和所有 agent 的显示名称与头像。头像选择本地图片后会自动裁成正方形，点击保存后才生效。',
+      contactPreview: '联系人预览',
+      contactPreviewSubtitle: '左栏、顶部标题和消息头像会同步更新',
+      contactField: '联系人',
+      displayName: '显示名称',
+      displayNamePlaceholder: '输入显示名称',
+      avatar: '头像',
+      chooseLocalImage: '选择本地图片',
+      clearAvatar: '清除头像',
+      avatarUploadHint: '支持本地图片，保存时自动裁成正方形并上传。',
+      saveContactSettings: '保存联系人设置',
+      appearanceIntro: '这里管理当前浏览器里的界面主题和显示风格。主题模式已经可用，后续可以继续接入语种、消息密度等外观项。',
+      accessIntro: '这里管理本机 / 局域网访问方式，以及局域网模式下可选的轻认证。Tailscale 访问沿用同一服务地址，只需要保证你的 Tailnet 已能访问当前主机。',
+      accessMode: '访问方式',
+      documentAccessTitle: '文档访问范围',
+      aboutTitle: '关于 openclaw-webchat',
+      shareRepoHint: '如果你在社区里分享这个项目，优先把这里的仓库链接发出去即可。',
+      selfManageTitle: '手动启动服务',
+      authGateCopy: '当前实例已开启轻认证。输入访问口令后继续使用 WebChat。'
+      ,
+      projectSummary: '一个面向个人使用的 OpenClaw WebChat，强调本地优先、长历史、媒体上传和更顺手的 agent 交流体验。'
+    },
+    status: {
+      initFailed: '初始化失败：{error}',
+      authRequired: '已开启访问口令，请先完成认证。',
+      authLoginHint: '如果你通过 Tailscale 访问，这里的口令仍由当前实例单独控制。',
+      passwordRequired: '请输入访问口令。',
+      authSuccess: '认证成功。',
+      noAgents: '暂未发现 agent。',
+      clickToOpen: '点击进入会话',
+      openingSession: '正在打开会话…',
+      createdTimeline: '已创建并进入该 agent 的长期主时间线。',
+      restoredSession: '会话已恢复。',
+      searchNeedAgent: '请先打开一个 agent 会话，再搜索该时间线中的历史消息。',
+      searchingHistory: '正在搜索当前 agent 的历史消息…',
+      searchPrompt: '输入关键词后即可搜索当前 agent 的主时间线。',
+      searchResultsSummary: '已找到 {total} 条命中结果{overflow}',
+      searchResultsOverflow: '，当前显示前 {shown} 条。',
+      searchResultsEnd: '。',
+      noSearchResults: '没有找到匹配的历史消息。',
+      searchHitMessage: '命中消息',
+      systemMarker: '系统标记',
+      messageFallback: '消息',
+      searchFailed: '搜索失败：{error}',
+      locatingHit: '正在定位命中消息…',
+      locateFailed: '未能定位到该条历史消息。',
+      locateSuccess: '已跳转到历史命中消息。',
+      emptyTimelineTitle: '当前时间线还没有消息',
+      emptyTimelineTip: '点输入框左侧的 + 可上传图片或音频；音频默认转写后发给 agent，同时保留原始文件引用。',
+      contextReset: '已重置上下文',
+      fileMissing: '文件丢失',
+      viewImage: '查看图片',
+      imageLoadFailed: '图片加载失败',
+      audioLabel: '音频',
+      audioLoadFailed: '音频加载失败',
+      transcriptText: '转写文本',
+      transcriptStatus: '转写状态',
+      transcriptFailedKeepAudio: '转写失败，已保留原始音频',
+      videoLabel: '视频',
+      videoLoadFailed: '视频加载失败',
+      fileLabel: '文件',
+      clickToOpenFile: '点击打开',
+      attachmentFailed: '附件处理失败：{error}',
+      sendDone: '发送完成。',
+      sendFailed: '发送失败：{error}',
+      uploadOnlyImageAudio: '仅支持图片或音频上传：{name}',
+      noLocalCommands: '当前没有可用本地命令',
+      executingCommand: '正在执行 {name}…',
+      commandFailed: '命令失败：{error}',
+      commandResetDone: '上游上下文已重置，本地历史已保留。',
+      commandCompactDone: '压缩命令已执行。',
+      commandDone: '{name} 已执行。',
+      timelineLongLived: '长期主时间线',
+      clickToCreate: '点击后自动创建',
+      noSummary: '暂无摘要',
+      processingAgent: 'agent 正在处理',
+      unnamedAudio: '未命名音频',
+      unnamedImage: '未命名图片',
+      remove: '移除',
+      uploadReadyWithMessage: '已就绪，发送时会一并带上',
+      uploadAutoImage: '发送时自动上传',
+      uploadAutoAudio: '发送时自动上传并转写',
+      transcriptReady: '转写完成 · {summary}',
+      transcriptFailedSendAudio: '转写失败，仍会发送原音频',
+      uploadFailed: '上传失败：{name}',
+      uploadingAudio: '正在上传并转写音频 {index}/{total}…',
+      uploadingImage: '正在上传图片 {index}/{total}…',
+      readFileFailed: '读取文件失败：{name}',
+      cropUnsupported: '浏览器不支持头像裁剪。',
+      imageCropLoadFailed: '图片加载失败，无法裁剪头像。',
+      avatarExportFailed: '头像导出失败。',
+      networkHint: '{mode} 模式启动时会绑定 {targetHost}。当前生效地址是 {effectiveHost}，{manager}{restart}',
+      networkHintRestart: '，保存后需重启服务。',
+      networkManagerEnv: '环境变量覆盖中',
+      networkManagerConfig: '当前由设置文件管理',
+      lightAuthEnabledHint: '轻认证已启用。留空表示保持当前口令；修改访问口令会立即刷新当前浏览器会话。',
+      lightAuthFirstHint: '首次启用轻认证时必须设置访问口令。',
+      lightAuthOffHint: '默认关闭。建议在局域网访问模式下按需开启；Tailscale 环境也可额外叠加这一层。',
+      documentAccessFollow: '文档访问范围目前与 OpenClaw 中的设定保持相同，WebChat 不再额外限制。',
+      documentAccessOpenClaw: '文档访问范围由 OpenClaw 自身决定。',
+      restartHintSupported: '监听地址切换必须重启后才会真正重新绑定；访问口令开关和口令修改可即时生效。可用重启命令：{hint}',
+      restartHintManual: '当前环境不支持从设置页自动重启。监听地址切换必须手动重启；访问口令开关和口令修改可即时生效。',
+      manualStartIntroSupported: '如果你需要手动启动或恢复服务，可以按下面的步骤操作；已注册 LaunchAgent 时也可以直接执行重启命令。',
+      manualStartIntro: '如果你需要手动启动或恢复服务，可以按下面的步骤操作。',
+      manualRestartFallback: '如果你使用自己的进程管理器，请按当前方式重启 openclaw-webchat。',
+      selfSubtitle: '用户自己',
+      syncUserAvatar: '会同步到消息区里“我”的头像与名称',
+      syncAgentAvatar: '会同步到 {agent} 的左栏、顶部标题和消息头像',
+      avatarCropped: '头像已自动裁成正方形，点击保存后生效。',
+      avatarWillRemove: '头像将在保存后移除。',
+      avatarOnlyImage: '头像仅支持图片文件。',
+      avatarProcessFailed: '头像处理失败：{error}',
+      uploadingAvatar: '正在上传头像…',
+      contactSettingsSaved: '联系人设置已保存。',
+      saveFailed: '保存失败：{error}',
+      accessSettingsSaved: '访问设置已保存。',
+      accessSettingsSaveFailed: '访问设置保存失败：{error}',
+      loggedOut: '当前浏览器已退出认证。',
+      logoutFailed: '退出认证失败：{error}',
+      restartingService: '服务正在重启，前端会自动等待恢复。',
+      restartingServiceShort: '服务正在重启…',
+      restartFailed: '重启服务失败：{error}',
+      serviceRecoveredSync: '服务已恢复，正在重新同步状态…',
+      serviceRestartDone: '服务重启完成，已重新连接。',
+      serviceRestartTimeout: '等待服务恢复超时，请手动刷新页面或稍后重试。',
+      sendingMessage: '消息发送中…',
+      sendingAttachments: '正在上传附件并发送…',
+      sendingAudioAttachments: '正在处理附件并发送…',
+      authRequiredInline: '当前访问需要先完成认证。',
+      presenceRunning: '处理中',
+      presenceRecent: '刚回复',
+      presenceIdle: '待命'
+    },
+    command: {
+      session: 'Session',
+      model: 'Model',
+      tools: 'Tools',
+      '/new': '重置上游上下文并保留本地历史',
+      '/reset': '等同 /new',
+      '/model': '查看或设置当前模型',
+      '/models': '查看可用模型列表（/model 别名）',
+      '/think': '查看或设置 thinking level',
+      '/fast': '查看或设置 fast mode',
+      '/verbose': '查看或设置 verbose level',
+      '/compact': '压缩当前上游 session transcript',
+      '/help': '显示本地 slash 命令帮助'
+    }
+  },
+  en: {
+    ui: {
+      closeSidebar: 'Close sidebar',
+      refresh: 'Refresh',
+      openSettings: 'Open settings',
+      openSidebar: 'Open sidebar',
+      selectAgent: 'Select an agent to start chatting',
+      searchHistory: 'Search this conversation history',
+      search: 'Search',
+      historySearch: 'History Search',
+      composerPlaceholder: 'Type a message. Enter inserts a newline. Use the / button or type a slash command to run local commands.',
+      attachMedia: 'Upload image or audio',
+      openSlashMenu: 'Open slash command menu',
+      send: 'Send',
+      workspaceSettings: 'Workspace Settings',
+      settings: 'Settings',
+      closeSettings: 'Close settings',
+      contacts: 'Contacts',
+      appearance: 'Appearance',
+      accessAndSecurity: 'Access & Security',
+      about: 'About',
+      manualStart: 'Manual Start',
+      language: 'Interface Language',
+      languageHint: 'Language preference is stored in this browser.',
+      themeHintStored: 'Theme preference is stored in this browser.',
+      comingSoonStructure: 'The settings panel now uses expandable sections so more items can be added without reworking the layout.',
+      localOnly: 'Local Only',
+      lanTailscale: 'LAN / Tailscale',
+      enableLightAuth: 'Enable optional light authentication',
+      accessPassword: 'Access Password',
+      confirmAccessPassword: 'Confirm Access Password',
+      saveAccessSettings: 'Save Access Settings',
+      logoutAuth: 'Log Out This Browser',
+      restartService: 'Restart Service',
+      projectLinks: 'Project Links',
+      githubRepo: 'GitHub Repository',
+      manualStartTitle: 'Manual Start',
+      stepProjectDir: '1. Project Directory',
+      stepInstall: '2. Install Dependencies',
+      stepStart: '3. Start Service',
+      stepRestart: '4. Restart When LaunchAgent Is Registered',
+      zoomOut: 'Zoom out',
+      resetZoom: 'Reset zoom',
+      zoomIn: 'Zoom in',
+      imagePreview: 'Image preview',
+      accessGate: 'Access Gate',
+      enterPassword: 'Enter Access Password',
+      enterWebChat: 'Enter WebChat',
+      serviceRestart: 'Service Restart',
+      serviceRestarting: 'Service Restarting',
+      theme: 'Theme'
+    },
+    text: {
+      contactsIntro: 'Manage display names and avatars for yourself and all agents. Local avatar images are cropped to a square and only apply after you save.',
+      contactPreview: 'Contact Preview',
+      contactPreviewSubtitle: 'The sidebar, title bar, and message avatars will update together.',
+      contactField: 'Contact',
+      displayName: 'Display Name',
+      displayNamePlaceholder: 'Enter a display name',
+      avatar: 'Avatar',
+      chooseLocalImage: 'Choose Local Image',
+      clearAvatar: 'Clear Avatar',
+      avatarUploadHint: 'Local images are supported and cropped to a square before upload when saved.',
+      saveContactSettings: 'Save Contact Settings',
+      appearanceIntro: 'Manage this browser\'s interface theme and visual style here. Theme switching is available now, and language or message-density options can continue to land here.',
+      accessIntro: 'Manage local / LAN access modes here, along with optional light authentication for LAN-style access. Tailscale uses the same service address as long as your Tailnet can already reach this host.',
+      accessMode: 'Access Mode',
+      documentAccessTitle: 'Document Access Scope',
+      aboutTitle: 'About openclaw-webchat',
+      shareRepoHint: 'If you share this project in the community, sending the repository link here is usually enough.',
+      selfManageTitle: 'Manual Start',
+      authGateCopy: 'Light authentication is enabled for this instance. Enter the access password to continue.'
+      ,
+      projectSummary: 'A personal-use OpenClaw WebChat focused on local-first usage, long-lived history, media uploads, and smoother agent conversations.'
+    },
+    status: {
+      initFailed: 'Initialization failed: {error}',
+      authRequired: 'An access password is enabled. Please authenticate first.',
+      authLoginHint: 'If you access through Tailscale, this password is still controlled by the current instance.',
+      passwordRequired: 'Please enter the access password.',
+      authSuccess: 'Authentication succeeded.',
+      noAgents: 'No agents found yet.',
+      clickToOpen: 'Click to open',
+      openingSession: 'Opening conversation…',
+      createdTimeline: 'Created and entered this agent\'s long-lived main timeline.',
+      restoredSession: 'Session restored.',
+      searchNeedAgent: 'Open an agent session first, then search within that timeline.',
+      searchingHistory: 'Searching the current agent history…',
+      searchPrompt: 'Enter keywords to search the current agent main timeline.',
+      searchResultsSummary: 'Found {total} matches{overflow}',
+      searchResultsOverflow: ', showing the first {shown}.',
+      searchResultsEnd: '.',
+      noSearchResults: 'No matching history messages found.',
+      searchHitMessage: 'Matched message',
+      systemMarker: 'System Marker',
+      messageFallback: 'Message',
+      searchFailed: 'Search failed: {error}',
+      locatingHit: 'Locating the matched message…',
+      locateFailed: 'Could not locate that history message.',
+      locateSuccess: 'Jumped to the matched history message.',
+      emptyTimelineTitle: 'This timeline has no messages yet',
+      emptyTimelineTip: 'Use the + button next to the composer to upload images or audio. Audio is transcribed before being sent to the agent while preserving the original file reference.',
+      contextReset: 'Context reset',
+      fileMissing: 'File missing',
+      viewImage: 'View image',
+      imageLoadFailed: 'Image failed to load',
+      audioLabel: 'Audio',
+      audioLoadFailed: 'Audio failed to load',
+      transcriptText: 'Transcript',
+      transcriptStatus: 'Transcript Status',
+      transcriptFailedKeepAudio: 'Transcription failed. The original audio was kept.',
+      videoLabel: 'Video',
+      videoLoadFailed: 'Video failed to load',
+      fileLabel: 'File',
+      clickToOpenFile: 'Click to open',
+      attachmentFailed: 'Attachment processing failed: {error}',
+      sendDone: 'Message sent.',
+      sendFailed: 'Send failed: {error}',
+      uploadOnlyImageAudio: 'Only image or audio uploads are supported: {name}',
+      noLocalCommands: 'No local commands are currently available.',
+      executingCommand: 'Running {name}…',
+      commandFailed: 'Command failed: {error}',
+      commandResetDone: 'Upstream context was reset while local history was kept.',
+      commandCompactDone: 'Compact command completed.',
+      commandDone: '{name} completed.',
+      timelineLongLived: 'Long-lived main timeline',
+      clickToCreate: 'Click to create automatically',
+      noSummary: 'No summary yet',
+      processingAgent: 'agent is processing',
+      unnamedAudio: 'Untitled audio',
+      unnamedImage: 'Untitled image',
+      remove: 'Remove',
+      uploadReadyWithMessage: 'Ready and will be included when sent',
+      uploadAutoImage: 'Will upload when sent',
+      uploadAutoAudio: 'Will upload and transcribe when sent',
+      transcriptReady: 'Transcript ready · {summary}',
+      transcriptFailedSendAudio: 'Transcription failed, but the original audio will still be sent',
+      uploadFailed: 'Upload failed: {name}',
+      uploadingAudio: 'Uploading and transcribing audio {index}/{total}…',
+      uploadingImage: 'Uploading image {index}/{total}…',
+      readFileFailed: 'Failed to read file: {name}',
+      cropUnsupported: 'This browser does not support avatar cropping.',
+      imageCropLoadFailed: 'The image failed to load and could not be cropped.',
+      avatarExportFailed: 'Failed to export avatar.',
+      networkHint: '{mode} binds to {targetHost} at startup. The current effective address is {effectiveHost}, {manager}{restart}',
+      networkHintRestart: ', and a service restart is required after saving.',
+      networkManagerEnv: 'currently overridden by environment variables',
+      networkManagerConfig: 'currently managed by the settings file',
+      lightAuthEnabledHint: 'Light authentication is enabled. Leave the fields empty to keep the current password. Updating it refreshes this browser session immediately.',
+      lightAuthFirstHint: 'You must set an access password when enabling light authentication for the first time.',
+      lightAuthOffHint: 'Disabled by default. It is recommended for LAN mode when needed, and it can also be layered on top of Tailscale access.',
+      documentAccessFollow: 'Document access scope currently follows the OpenClaw configuration. WebChat does not apply an extra restriction here.',
+      documentAccessOpenClaw: 'Document access scope is determined by OpenClaw itself.',
+      restartHintSupported: 'Changing the bind address still requires a restart to rebind the listener. Light-auth toggles and password changes take effect immediately. Available restart command: {hint}',
+      restartHintManual: 'Automatic restart is not available in the current environment. Bind-address changes must be restarted manually, while light-auth toggles and password changes still apply immediately.',
+      manualStartIntroSupported: 'If you need to start or recover the service manually, follow the steps below. When LaunchAgent is registered, you can also run the restart command directly.',
+      manualStartIntro: 'If you need to start or recover the service manually, follow the steps below.',
+      manualRestartFallback: 'If you use your own process manager, restart openclaw-webchat the same way you normally do.',
+      selfSubtitle: 'You',
+      syncUserAvatar: 'This updates the avatar and display name used for "Me" in the message area.',
+      syncAgentAvatar: 'This updates the sidebar, title bar, and message avatar for {agent}.',
+      avatarCropped: 'The avatar has been cropped to a square and will apply after saving.',
+      avatarWillRemove: 'The avatar will be removed after saving.',
+      avatarOnlyImage: 'Avatar uploads only support image files.',
+      avatarProcessFailed: 'Avatar processing failed: {error}',
+      uploadingAvatar: 'Uploading avatar…',
+      contactSettingsSaved: 'Contact settings saved.',
+      saveFailed: 'Save failed: {error}',
+      accessSettingsSaved: 'Access settings saved.',
+      accessSettingsSaveFailed: 'Failed to save access settings: {error}',
+      loggedOut: 'This browser has logged out.',
+      logoutFailed: 'Failed to log out: {error}',
+      restartingService: 'The service is restarting and the frontend will wait for recovery automatically.',
+      restartingServiceShort: 'Restarting service…',
+      restartFailed: 'Failed to restart service: {error}',
+      serviceRecoveredSync: 'The service is back. Resynchronizing state…',
+      serviceRestartDone: 'Service restart completed and the connection has been restored.',
+      serviceRestartTimeout: 'Timed out waiting for the service to recover. Please refresh the page manually or try again later.',
+      sendingMessage: 'Sending message…',
+      sendingAttachments: 'Uploading attachments and sending…',
+      sendingAudioAttachments: 'Processing attachments and sending…',
+      authRequiredInline: 'Authentication is required before you can continue.',
+      presenceRunning: 'Processing',
+      presenceRecent: 'Just replied',
+      presenceIdle: 'Idle'
+    },
+    command: {
+      session: 'Session',
+      model: 'Model',
+      tools: 'Tools',
+      '/new': 'Reset the upstream context while keeping local history',
+      '/reset': 'Alias for /new',
+      '/model': 'View or set the current model',
+      '/models': 'View the available model list (alias for /model)',
+      '/think': 'View or set the thinking level',
+      '/fast': 'View or set fast mode',
+      '/verbose': 'View or set verbose level',
+      '/compact': 'Compact the current upstream session transcript',
+      '/help': 'Show local slash command help'
+    }
+  }
 };
 
 const state = {
@@ -46,6 +483,7 @@ const state = {
   authError: '',
   restartingService: false,
   serviceRestartMessage: '',
+  language: 'zh-CN',
   settingsOpen: false,
   settingsExpandedSection: null,
   settingsSelectedContactKey: null,
@@ -150,6 +588,7 @@ const settingsAvatarHintEl = document.getElementById('settingsAvatarHint');
 const saveSettingsButtonEl = document.getElementById('saveSettingsButton');
 const settingsThemePresetButtonsEl = document.getElementById('settingsThemePresetButtons');
 const settingsThemeHintEl = document.getElementById('settingsThemeHint');
+const settingsLanguageSelectEl = document.getElementById('settingsLanguageSelect');
 const settingsNetworkAccessSelectEl = document.getElementById('settingsNetworkAccessSelect');
 const settingsNetworkHintEl = document.getElementById('settingsNetworkHint');
 const settingsLightAuthToggleEl = document.getElementById('settingsLightAuthToggle');
@@ -174,6 +613,7 @@ const mediaZoomOutButtonEl = document.getElementById('mediaZoomOutButton');
 const mediaResetZoomButtonEl = document.getElementById('mediaResetZoomButton');
 const mediaZoomInButtonEl = document.getElementById('mediaZoomInButton');
 const authGateEl = document.getElementById('authGate');
+const authGateCopyEl = document.getElementById('authGateCopy');
 const authLoginFormEl = document.getElementById('authLoginForm');
 const authPasswordInputEl = document.getElementById('authPasswordInput');
 const authLoginButtonEl = document.getElementById('authLoginButton');
@@ -182,6 +622,8 @@ const serviceRestartGateEl = document.getElementById('serviceRestartGate');
 const serviceRestartMessageEl = document.getElementById('serviceRestartMessage');
 const appShellEl = document.querySelector('.app-shell');
 
+state.language = getStoredLanguage();
+applyLanguage(state.language);
 state.themeChoice = getStoredThemeChoice();
 applyThemeChoice(state.themeChoice);
 
@@ -189,6 +631,7 @@ boot().catch((error) => showStatus(`初始化失败：${formatError(error)}`, 'e
 
 async function boot() {
   bindEvents();
+  renderLocalizedChrome();
   autoResizeComposer();
   await refreshAuthStatus();
   if (state.authEnabled && !state.authenticated) {
@@ -240,6 +683,7 @@ function bindEvents() {
   settingsAvatarFileInputEl.addEventListener('change', handleSettingsAvatarSelection);
   saveSettingsButtonEl.addEventListener('click', saveSettingsContact);
   settingsThemePresetButtonsEl?.addEventListener('click', handleThemePresetClick);
+  settingsLanguageSelectEl?.addEventListener('change', handleLanguageChange);
   settingsNetworkAccessSelectEl?.addEventListener('change', handleServiceSettingsDraftChange);
   settingsLightAuthToggleEl?.addEventListener('change', handleServiceSettingsDraftChange);
   settingsLightAuthPasswordInputEl?.addEventListener('input', handleServiceSettingsDraftChange);
@@ -275,11 +719,186 @@ function bindEvents() {
   window.addEventListener('keydown', handleWindowKeydown);
 }
 
+function normalizeLanguage(value) {
+  return SUPPORTED_LANGUAGES.includes(value) ? value : 'zh-CN';
+}
+
+function getStoredLanguage() {
+  try {
+    return normalizeLanguage(localStorage.getItem(LANGUAGE_STORAGE_KEY));
+  } catch {
+    return normalizeLanguage(document.documentElement.lang);
+  }
+}
+
+function persistLanguage(language) {
+  state.language = normalizeLanguage(language);
+  applyLanguage(state.language);
+  try {
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, state.language);
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function applyLanguage(language) {
+  state.language = normalizeLanguage(language);
+  document.documentElement.lang = state.language;
+}
+
+function t(key, replacements = {}) {
+  const locale = I18N[state.language] || I18N['zh-CN'];
+  const fallback = I18N['zh-CN'];
+  const parts = String(key || '').split('.');
+  let value = locale;
+  let fallbackValue = fallback;
+  for (const part of parts) {
+    value = value?.[part];
+    fallbackValue = fallbackValue?.[part];
+  }
+  const template = typeof value === 'string' ? value : typeof fallbackValue === 'string' ? fallbackValue : key;
+  return template.replace(/\{(\w+)\}/g, (_match, name) => String(replacements[name] ?? ''));
+}
+
+function themeText(choice, field) {
+  const preset = THEME_PRESETS[choice] || THEME_PRESETS.dark;
+  const value = preset?.[field];
+  return value?.[state.language] || value?.['zh-CN'] || '';
+}
+
+function handleLanguageChange() {
+  persistLanguage(settingsLanguageSelectEl?.value || 'zh-CN');
+  renderLocalizedChrome();
+  renderThemePresetControls();
+  renderAgentList({ refreshIdentity: false });
+  updateHeader();
+  renderHistorySearchPanel();
+  renderMessages();
+  renderPendingUploads();
+  renderCommandMenu();
+  renderSettingsPreview();
+  renderServiceSettingsForm();
+  renderProjectInfo();
+  renderManualStartGuide();
+}
+
+function setAccordionButtonLabel(button, label) {
+  const labelSpan = button?.querySelector('span');
+  if (labelSpan) labelSpan.textContent = label;
+}
+
+function renderLocalizedChrome() {
+  const closeSidebarLabel = t('ui.closeSidebar');
+  const refreshLabel = t('ui.refresh');
+  const openSettingsLabel = t('ui.openSettings');
+  const openSidebarLabel = t('ui.openSidebar');
+  const searchLabel = t('ui.search');
+  const sendLabel = t('ui.send');
+
+  closeSidebarButtonEl?.setAttribute('aria-label', closeSidebarLabel);
+  refreshAgentsButtonEl?.setAttribute('aria-label', refreshLabel);
+  openSidebarButtonEl?.setAttribute('aria-label', openSidebarLabel);
+  headerRefreshButtonEl.textContent = refreshLabel;
+  if (!state.activeAgentId) chatSubtitleEl.textContent = t('ui.selectAgent');
+  historySearchInputEl.placeholder = state.activeAgentId ? t('ui.searchHistory') : t('ui.searchHistory');
+  historySearchSubmitButtonEl.textContent = searchLabel;
+  historySearchPanelEl?.setAttribute('aria-label', t('ui.historySearch'));
+  composerInputEl.placeholder = t('ui.composerPlaceholder');
+  attachButtonEl?.setAttribute('aria-label', t('ui.attachMedia'));
+  attachButtonEl?.setAttribute('title', t('ui.attachMedia'));
+  newContextButtonEl?.setAttribute('aria-label', t('ui.openSlashMenu'));
+  sendButtonEl.textContent = sendLabel;
+  closeSettingsButtonEl?.setAttribute('aria-label', t('ui.closeSettings'));
+  authPasswordInputEl?.setAttribute('placeholder', t('ui.enterPassword'));
+  authLoginButtonEl.textContent = t('ui.enterWebChat');
+  if (authGateCopyEl) authGateCopyEl.textContent = t('text.authGateCopy');
+  authLoginMessageEl.textContent = state.authError || t('status.authLoginHint');
+  if (authGateEl?.querySelector('.eyebrow')) authGateEl.querySelector('.eyebrow').textContent = t('ui.accessGate');
+  if (authGateEl?.querySelector('h2')) authGateEl.querySelector('h2').textContent = t('ui.enterPassword');
+  if (serviceRestartGateEl?.querySelector('.eyebrow')) serviceRestartGateEl.querySelector('.eyebrow').textContent = t('ui.serviceRestart');
+  if (serviceRestartGateEl?.querySelector('h2')) serviceRestartGateEl.querySelector('h2').textContent = t('ui.serviceRestarting');
+  if (mediaZoomOutButtonEl) mediaZoomOutButtonEl.setAttribute('aria-label', t('ui.zoomOut'));
+  if (mediaResetZoomButtonEl) mediaResetZoomButtonEl.setAttribute('aria-label', t('ui.resetZoom'));
+  if (mediaZoomInButtonEl) mediaZoomInButtonEl.setAttribute('aria-label', t('ui.zoomIn'));
+  if (mediaViewerImageEl && !state.mediaViewerOpen) mediaViewerImageEl.alt = t('ui.imagePreview');
+  settingsButtonEl?.querySelectorAll('span')?.[1] && (settingsButtonEl.querySelectorAll('span')[1].textContent = openSettingsLabel);
+  settingsPanelEl?.querySelector('.eyebrow') && (settingsPanelEl.querySelector('.eyebrow').textContent = t('ui.workspaceSettings'));
+  settingsPanelEl?.querySelector('h3') && (settingsPanelEl.querySelector('h3').textContent = t('ui.settings'));
+  setAccordionButtonLabel(settingsContactsTabEl, t('ui.contacts'));
+  setAccordionButtonLabel(settingsPreferencesTabEl, t('ui.appearance'));
+  setAccordionButtonLabel(settingsAccessTabEl, t('ui.accessAndSecurity'));
+  setAccordionButtonLabel(settingsAboutTabEl, t('ui.about'));
+  setAccordionButtonLabel(settingsManualStartTabEl, t('ui.manualStart'));
+
+  const appearanceSection = settingsPreferencesSectionEl;
+  appearanceSection?.querySelector('.settings-section-title') && (appearanceSection.querySelector('.settings-section-title').textContent = t('ui.appearance'));
+  const appearanceCopy = appearanceSection?.querySelector('.settings-section-copy');
+  if (appearanceCopy) appearanceCopy.textContent = t('text.appearanceIntro');
+  const appearanceLabels = appearanceSection?.querySelectorAll('.settings-field > span');
+  if (appearanceLabels?.[0]) appearanceLabels[0].textContent = t('ui.theme');
+  if (appearanceLabels?.[1]) appearanceLabels[1].textContent = t('ui.language');
+  const appearanceHint = appearanceSection?.querySelector('.settings-field-hint:last-of-type');
+  if (appearanceHint) appearanceHint.textContent = t('ui.comingSoonStructure');
+
+  const contactSection = settingsContactsSectionEl;
+  contactSection?.querySelector('.settings-section-title') && (contactSection.querySelector('.settings-section-title').textContent = t('ui.contacts'));
+  const contactCopy = contactSection?.querySelector('.settings-section-copy');
+  if (contactCopy) contactCopy.textContent = t('text.contactsIntro');
+  if (settingsPreviewTitleEl && !state.settingsSelectedContactKey) settingsPreviewTitleEl.textContent = t('text.contactPreview');
+  if (settingsPreviewSubtitleEl && !state.settingsSelectedContactKey) settingsPreviewSubtitleEl.textContent = t('text.contactPreviewSubtitle');
+  if (settingsChooseAvatarButtonEl) settingsChooseAvatarButtonEl.textContent = t('text.chooseLocalImage');
+  if (settingsClearAvatarButtonEl) settingsClearAvatarButtonEl.textContent = t('text.clearAvatar');
+  if (saveSettingsButtonEl) saveSettingsButtonEl.textContent = t('text.saveContactSettings');
+
+  const contactLabels = contactSection?.querySelectorAll('.settings-field > span');
+  if (contactLabels?.[0]) contactLabels[0].textContent = t('text.contactField');
+  if (contactLabels?.[1]) contactLabels[1].textContent = t('text.displayName');
+  if (contactLabels?.[2]) contactLabels[2].textContent = t('text.avatar');
+  settingsDisplayNameInputEl.placeholder = t('text.displayNamePlaceholder');
+
+  const accessSection = settingsAccessSectionEl;
+  accessSection?.querySelector('.settings-section-title') && (accessSection.querySelector('.settings-section-title').textContent = t('ui.accessAndSecurity'));
+  const accessCopy = accessSection?.querySelector('.settings-section-copy');
+  if (accessCopy) accessCopy.textContent = t('text.accessIntro');
+  const accessLabels = accessSection?.querySelectorAll('.settings-field > span');
+  if (accessLabels?.[0]) accessLabels[0].textContent = t('text.accessMode');
+  if (accessLabels?.[2]) accessLabels[2].textContent = t('ui.accessPassword');
+  if (accessLabels?.[3]) accessLabels[3].textContent = t('ui.confirmAccessPassword');
+  const accessCheckbox = settingsLightAuthToggleEl?.parentElement?.querySelector('span:last-child');
+  if (accessCheckbox) accessCheckbox.textContent = t('ui.enableLightAuth');
+  settingsLightAuthPasswordInputEl.placeholder = state.language === 'en' ? 'Leave empty to keep the current password' : '留空表示保持当前口令';
+  settingsLightAuthPasswordConfirmInputEl.placeholder = state.language === 'en' ? 'Enter the access password again' : '再次输入访问口令';
+  settingsNetworkAccessSelectEl?.querySelector('option[value="local"]') && (settingsNetworkAccessSelectEl.querySelector('option[value="local"]').textContent = t('ui.localOnly'));
+  settingsNetworkAccessSelectEl?.querySelector('option[value="lan"]') && (settingsNetworkAccessSelectEl.querySelector('option[value="lan"]').textContent = t('ui.lanTailscale'));
+  if (saveServiceSettingsButtonEl) saveServiceSettingsButtonEl.textContent = t('ui.saveAccessSettings');
+  if (settingsLogoutButtonEl) settingsLogoutButtonEl.textContent = t('ui.logoutAuth');
+  if (restartServiceButtonEl) restartServiceButtonEl.textContent = t('ui.restartService');
+  const docTitle = settingsAccessSectionEl?.querySelector('.settings-card-muted .settings-section-title');
+  if (docTitle) docTitle.textContent = t('text.documentAccessTitle');
+
+  const aboutSection = settingsAboutSectionEl;
+  aboutSection?.querySelector('.settings-section-title') && (aboutSection.querySelector('.settings-section-title').textContent = t('text.aboutTitle'));
+  const projectLinksTitle = aboutSection?.querySelector('.settings-card .settings-section-title');
+  if (projectLinksTitle) projectLinksTitle.textContent = t('ui.projectLinks');
+  const aboutHint = aboutSection?.querySelector('.settings-field-hint');
+  if (aboutHint) aboutHint.textContent = t('text.shareRepoHint');
+
+  const manualSection = settingsManualStartSectionEl;
+  manualSection?.querySelector('.settings-section-title') && (manualSection.querySelector('.settings-section-title').textContent = t('ui.manualStart'));
+  const startupLabels = manualSection?.querySelectorAll('.settings-startup-label');
+  if (startupLabels?.[0]) startupLabels[0].textContent = t('ui.stepProjectDir');
+  if (startupLabels?.[1]) startupLabels[1].textContent = t('ui.stepInstall');
+  if (startupLabels?.[2]) startupLabels[2].textContent = t('ui.stepStart');
+  if (startupLabels?.[3]) startupLabels[3].textContent = t('ui.stepRestart');
+
+  settingsLanguageSelectEl.value = state.language;
+}
+
 async function loadSettings() {
   try {
     const payload = await apiGet('/api/openclaw-webchat/settings');
     state.userProfile = {
-      displayName: payload?.userProfile?.displayName || '我',
+      displayName: payload?.userProfile?.displayName || (state.language === 'en' ? 'Me' : '我'),
       avatarUrl: payload?.userProfile?.avatarUrl || null
     };
     state.serviceSettings = normalizeServiceSettings(payload?.serviceSettings);
@@ -287,7 +906,7 @@ async function loadSettings() {
     state.authEnabled = Boolean(payload?.authStatus?.enabled || state.serviceSettings.authEnabled);
     state.authenticated = payload?.authStatus?.authenticated !== false;
   } catch {
-    state.userProfile = { displayName: '我', avatarUrl: null };
+    state.userProfile = { displayName: state.language === 'en' ? 'Me' : '我', avatarUrl: null };
     state.serviceSettings = normalizeServiceSettings(null);
     state.projectInfo = normalizeProjectInfo(null);
   }
@@ -402,11 +1021,22 @@ function renderThemePresetControls() {
     const active = button.dataset.themeChoice === state.themeChoice;
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    const choice = button.dataset.themeChoice || 'dark';
+    const theme = THEME_PRESETS[choice] || THEME_PRESETS.dark;
+    const nameEl = button.querySelector('.theme-preset-name');
+    const tagEl = button.querySelector('.theme-preset-tag');
+    const copyEl = button.querySelector('.theme-preset-copy');
+    if (nameEl) nameEl.textContent = themeText(choice, 'name');
+    if (tagEl) tagEl.textContent = theme?.tag?.[state.language] || theme?.tag?.['zh-CN'] || '';
+    if (copyEl) copyEl.textContent = themeText(choice, 'hint');
   });
 
   if (settingsThemeHintEl) {
-    const theme = THEME_PRESETS[state.themeChoice] || THEME_PRESETS.dark;
-    settingsThemeHintEl.textContent = `当前使用 ${theme.name}。${theme.hint} 主题偏好会保存在当前浏览器。`;
+    const themeName = themeText(state.themeChoice, 'name');
+    const themeHint = themeText(state.themeChoice, 'hint');
+    settingsThemeHintEl.textContent = state.language === 'en'
+      ? `Current theme: ${themeName}. ${themeHint} ${t('ui.themeHintStored')}`
+      : `当前使用 ${themeName}。${themeHint} ${t('ui.themeHintStored')}`;
   }
 }
 
@@ -505,7 +1135,7 @@ function renderAuthGate() {
   if (!authLoginButtonEl || !authLoginMessageEl) return;
   authLoginButtonEl.disabled = state.authBusy;
   authPasswordInputEl.disabled = state.authBusy;
-  authLoginMessageEl.textContent = state.authError || '如果你通过 Tailscale 访问，这里的口令仍由当前实例单独控制。';
+  authLoginMessageEl.textContent = state.authError || t('status.authLoginHint');
 }
 
 function renderServiceRestartGate() {
@@ -514,7 +1144,7 @@ function renderServiceRestartGate() {
   serviceRestartGateEl?.setAttribute('aria-hidden', open ? 'false' : 'true');
   appShellEl?.classList.toggle('service-restarting', open);
   if (serviceRestartMessageEl) {
-    serviceRestartMessageEl.textContent = state.serviceRestartMessage || '正在等待 WebChat 服务重新启动并恢复连接…';
+    serviceRestartMessageEl.textContent = state.serviceRestartMessage || t('status.restartingService');
   }
 }
 
@@ -522,7 +1152,7 @@ async function handleAuthLoginSubmit(event) {
   event.preventDefault();
   const password = authPasswordInputEl?.value || '';
   if (!password) {
-    state.authError = '请输入访问口令。';
+    state.authError = t('status.passwordRequired');
     renderAuthGate();
     return;
   }
@@ -537,7 +1167,7 @@ async function handleAuthLoginSubmit(event) {
     state.authBusy = false;
     await refreshAuthStatus();
     await loadAuthenticatedApp({ force: true });
-    showStatus('认证成功。', 'success');
+    showStatus(t('status.authSuccess'), 'success');
   } catch (error) {
     state.authBusy = false;
     state.authError = formatError(error);
@@ -599,7 +1229,7 @@ function renderAgentList({ refreshIdentity = true } = {}) {
     agentListEl.innerHTML = '';
     const empty = document.createElement('div');
     empty.className = 'empty-tip';
-    empty.textContent = '暂未发现 agent。';
+    empty.textContent = t('status.noAgents');
     agentListEl.append(empty);
     return;
   }
@@ -686,7 +1316,7 @@ function updateAgentCardElement(button, agent, { refreshIdentity = true } = {}) 
   refs.presence.className = `presence-dot ${presenceState}`;
   refs.presence.title = formatPresenceLabel(agent.presence);
   refs.presenceLabel.textContent = formatPresenceLabel(agent.presence);
-  refs.summary.textContent = agent.summary || '点击进入会话';
+  refs.summary.textContent = agent.summary || t('status.clickToOpen');
   refs.time.textContent = formatAgentTimestamp(agent.lastMessageAt);
 }
 
@@ -730,7 +1360,7 @@ async function openAgent(agentId, { forceReload = false, preserveScrollBottom = 
   renderAgentList({ refreshIdentity: false });
   updateHeader();
   populateSettingsForm();
-  showStatus('正在打开会话…', 'info');
+  showStatus(t('status.openingSession'), 'info');
   toggleSidebar(false);
 
   const promise = (async () => {
@@ -749,7 +1379,7 @@ async function openAgent(agentId, { forceReload = false, preserveScrollBottom = 
     } else {
       maybeScrollMessagesToBottom();
     }
-    showStatus(response.created ? '已创建并进入该 agent 的长期主时间线。' : '会话已恢复。', 'success');
+    showStatus(response.created ? t('status.createdTimeline') : t('status.restoredSession'), 'success');
   })();
 
   state.selectedOpenPromise = promise;
@@ -794,7 +1424,7 @@ function renderHistorySearchPanel() {
 
   if (historySearchInputEl) {
     historySearchInputEl.disabled = !state.activeAgentId;
-    historySearchInputEl.placeholder = state.activeAgentId ? '搜索当前会话历史' : '先打开一个 agent 再搜索';
+    historySearchInputEl.placeholder = t('ui.searchHistory');
   }
 
   historySearchSubmitButtonEl.disabled = !state.activeAgentId || state.historySearchLoading;
@@ -802,9 +1432,9 @@ function renderHistorySearchPanel() {
   if (!state.historySearchOpen) return;
 
   if (!state.activeAgentId) {
-    historySearchMetaEl.textContent = '请先打开一个 agent 会话，再搜索该时间线中的历史消息。';
+    historySearchMetaEl.textContent = t('status.searchNeedAgent');
   } else if (state.historySearchLoading) {
-    historySearchMetaEl.textContent = '正在搜索当前 agent 的历史消息…';
+    historySearchMetaEl.textContent = t('status.searchingHistory');
   } else if (state.historySearchError) {
     historySearchMetaEl.textContent = state.historySearchError;
   } else if (state.historySearchShowingRecents && state.historySearchRecentQueries.length) {
@@ -812,9 +1442,14 @@ function renderHistorySearchPanel() {
   } else if (!state.historySearchQuery) {
     historySearchMetaEl.textContent = state.historySearchRecentQueries.length
       ? ''
-      : '输入关键词后即可搜索当前 agent 的主时间线。';
+      : t('status.searchPrompt');
   } else {
-    historySearchMetaEl.textContent = `已找到 ${state.historySearchTotal} 条命中结果${state.historySearchTotal > state.historySearchResults.length ? `，当前显示前 ${state.historySearchResults.length} 条。` : '。'}`;
+    historySearchMetaEl.textContent = t('status.searchResultsSummary', {
+      total: state.historySearchTotal,
+      overflow: state.historySearchTotal > state.historySearchResults.length
+        ? t('status.searchResultsOverflow', { shown: state.historySearchResults.length })
+        : t('status.searchResultsEnd')
+    });
   }
 
   historySearchResultsEl.innerHTML = '';
@@ -837,7 +1472,7 @@ function renderHistorySearchPanel() {
   if (!state.historySearchLoading && !state.historySearchResults.length) {
     const empty = document.createElement('div');
     empty.className = 'history-search-empty';
-    empty.textContent = '没有找到匹配的历史消息。';
+    empty.textContent = t('status.noSearchResults');
     historySearchResultsEl.append(empty);
     return;
   }
@@ -872,7 +1507,7 @@ function createHistorySearchResultItem(result) {
 
   const excerpt = document.createElement('div');
   excerpt.className = 'history-search-excerpt';
-  excerpt.textContent = result.excerpt || result.summary || '命中消息';
+  excerpt.textContent = result.excerpt || result.summary || t('status.searchHitMessage');
 
   button.append(top, excerpt);
   return button;
@@ -898,7 +1533,7 @@ function createHistorySearchRecentItem(query) {
 
 function getHistorySearchResultSpeakerName(role) {
   if (role === 'user') {
-    return state.userProfile.displayName || '我';
+    return state.userProfile.displayName || (state.language === 'en' ? 'Me' : '我');
   }
 
   if (role === 'assistant') {
@@ -907,10 +1542,10 @@ function getHistorySearchResultSpeakerName(role) {
   }
 
   if (role === 'marker') {
-    return '系统标记';
+    return t('status.systemMarker');
   }
 
-  return String(role || '消息');
+  return String(role || t('status.messageFallback'));
 }
 
 function handleHistorySearchFocus() {
@@ -996,7 +1631,7 @@ async function executeHistorySearch(query) {
     if (requestId !== state.historySearchRequestId) return;
     state.historySearchResults = [];
     state.historySearchTotal = 0;
-    state.historySearchError = `搜索失败：${formatError(error)}`;
+    state.historySearchError = t('status.searchFailed', { error: formatError(error) });
   } finally {
     if (requestId === state.historySearchRequestId) {
       state.historySearchLoading = false;
@@ -1007,11 +1642,11 @@ async function executeHistorySearch(query) {
 
 async function jumpToHistorySearchResult(messageId) {
   if (!messageId || !state.activeAgentId) return;
-  showStatus('正在定位命中消息…', 'info');
+  showStatus(t('status.locatingHit'), 'info');
 
   const found = await ensureHistoryMessageLoaded(messageId);
   if (!found) {
-    showStatus('未能定位到该条历史消息。', 'error');
+    showStatus(t('status.locateFailed'), 'error');
     return;
   }
 
@@ -1023,7 +1658,7 @@ async function jumpToHistorySearchResult(messageId) {
     scrollToHistoryMessage(messageId);
     requestAnimationFrame(() => scrollToHistoryMessage(messageId));
   });
-  showStatus('已跳转到历史命中消息。', 'success');
+  showStatus(t('status.locateSuccess'), 'success');
 }
 
 async function ensureHistoryMessageLoaded(messageId) {
@@ -1061,8 +1696,8 @@ function renderMessages() {
     empty.className = 'empty-state';
     empty.innerHTML = `
       <div class="eyebrow">openclaw-webchat</div>
-      <h3>当前时间线还没有消息</h3>
-      <p class="empty-tip">点输入框左侧的 + 可上传图片或音频；音频默认转写后发给 agent，同时保留原始文件引用。</p>
+      <h3>${t('status.emptyTimelineTitle')}</h3>
+      <p class="empty-tip">${t('status.emptyTimelineTip')}</p>
     `;
     messageListEl.append(empty);
     return;
@@ -1074,7 +1709,7 @@ function renderMessages() {
       row.className = 'marker-row';
       const chip = document.createElement('div');
       chip.className = 'marker-chip';
-      chip.textContent = message.label || '已重置上下文';
+      chip.textContent = message.label || t('status.contextReset');
       row.append(chip);
       messageListEl.append(row);
       continue;
@@ -1187,42 +1822,42 @@ function escapeRegExp(value) {
 
 function renderMediaBlock(block, bubble = null) {
   if (block.invalid) {
-    return createInvalidMediaCard(block.name || block.type || '文件', block.invalidReason || '文件丢失');
+    return createInvalidMediaCard(block.name || block.type || t('status.fileLabel'), block.invalidReason || t('status.fileMissing'));
   }
 
   if (block.type === 'image') {
     const wrapper = document.createElement('button');
     wrapper.type = 'button';
     wrapper.className = 'message-image-button';
-    wrapper.setAttribute('aria-label', '查看图片');
+    wrapper.setAttribute('aria-label', t('status.viewImage'));
     wrapper.addEventListener('click', () => openMediaViewer(block));
 
     const image = document.createElement('img');
     image.className = 'message-image';
     image.src = block.url;
-    image.alt = block.name || '图片';
+    image.alt = block.name || t('ui.imagePreview');
     image.loading = 'lazy';
     keepMessagesPinnedOnMediaLoad(image, 'load');
     bindVisualMediaWidth(bubble, wrapper, image, 'load');
-    image.addEventListener('error', () => wrapper.replaceWith(createInvalidMediaCard(block.name || '图片', '图片加载失败')));
+    image.addEventListener('error', () => wrapper.replaceWith(createInvalidMediaCard(block.name || t('ui.imagePreview'), t('status.imageLoadFailed'))));
     wrapper.append(image);
     return wrapper;
   }
 
   if (block.type === 'audio') {
-    const wrapper = createMediaCard(block, '音频');
+    const wrapper = createMediaCard(block, t('status.audioLabel'));
     const audio = document.createElement('audio');
     audio.controls = true;
     audio.preload = 'metadata';
     audio.src = block.url;
     keepMessagesPinnedOnMediaLoad(audio, 'loadedmetadata');
-    audio.addEventListener('error', () => wrapper.replaceWith(createInvalidMediaCard(block.name || '音频', '音频加载失败')));
+    audio.addEventListener('error', () => wrapper.replaceWith(createInvalidMediaCard(block.name || t('status.audioLabel'), t('status.audioLoadFailed'))));
     wrapper.append(audio);
 
     if (block.transcriptStatus === 'ready' && block.transcriptText) {
-      wrapper.append(createMediaNote('转写文本', block.transcriptText));
+      wrapper.append(createMediaNote(t('status.transcriptText'), block.transcriptText));
     } else if (block.transcriptStatus === 'failed') {
-      wrapper.append(createMediaNote('转写状态', block.transcriptError || '转写失败，已保留原始音频', true));
+      wrapper.append(createMediaNote(t('status.transcriptStatus'), block.transcriptError || t('status.transcriptFailedKeepAudio'), true));
     }
 
     return wrapper;
@@ -1239,7 +1874,7 @@ function renderMediaBlock(block, bubble = null) {
     video.src = block.url;
     keepMessagesPinnedOnMediaLoad(video, 'loadedmetadata');
     bindVisualMediaWidth(bubble, wrapper, video, 'loadedmetadata');
-    video.addEventListener('error', () => wrapper.replaceWith(createInvalidMediaCard(block.name || '视频', '视频加载失败')));
+    video.addEventListener('error', () => wrapper.replaceWith(createInvalidMediaCard(block.name || t('status.videoLabel'), t('status.videoLoadFailed'))));
     wrapper.append(video);
     return wrapper;
   }
@@ -1252,11 +1887,11 @@ function renderMediaBlock(block, bubble = null) {
 
   const title = document.createElement('div');
   title.className = 'file-title';
-  title.textContent = block.name || '文件';
+  title.textContent = block.name || t('status.fileLabel');
 
   const meta = document.createElement('div');
   meta.className = 'file-meta';
-  meta.textContent = `点击打开${block.sizeBytes ? ` · ${formatBytes(block.sizeBytes)}` : ''}`;
+  meta.textContent = `${t('status.clickToOpenFile')}${block.sizeBytes ? ` · ${formatBytes(block.sizeBytes)}` : ''}`;
 
   link.append(title, meta);
   return link;
@@ -1426,7 +2061,7 @@ async function handleSendSubmit(event) {
     uploadedBlocks = await ensurePendingUploadsReady();
   } catch (error) {
     endSessionActivity(targetSessionKey);
-    showContextStatus(context, `附件处理失败：${formatError(error)}`, 'error');
+    showContextStatus(context, t('status.attachmentFailed', { error: formatError(error) }), 'error');
     return;
   }
 
@@ -1458,7 +2093,7 @@ async function handleSendSubmit(event) {
       renderMessages();
       maybeScrollMessagesToBottom();
     }
-    showContextStatus(context, '发送完成。', 'success');
+    showContextStatus(context, t('status.sendDone'), 'success');
     await refreshAgents({ autoOpen: false });
   } catch (error) {
     if (isOperationContextActive(context)) {
@@ -1469,7 +2104,7 @@ async function handleSendSubmit(event) {
       autoResizeComposer();
       renderMessages();
     }
-    showContextStatus(context, `发送失败：${formatError(error)}`, 'error');
+    showContextStatus(context, t('status.sendFailed', { error: formatError(error) }), 'error');
   } finally {
     endSessionActivity(targetSessionKey);
     if (isOperationContextActive(context)) {
@@ -1487,7 +2122,7 @@ async function handleFileSelection(event) {
   for (const file of files) {
     const kind = detectAttachmentKind(file);
     if (!kind) {
-      showStatus(`仅支持图片或音频上传：${file.name}`, 'error');
+      showStatus(t('status.uploadOnlyImageAudio', { name: file.name }), 'error');
       continue;
     }
 
@@ -1531,15 +2166,15 @@ async function loadCommandCatalog() {
 
 function getDefaultCommandCatalog() {
   return [
-    { name: '/new', description: '重置上游上下文并保留本地历史' },
-    { name: '/reset', description: '等同 /new' },
-    { name: '/model', description: '查看或设置当前模型', args: '<name>' },
-    { name: '/models', description: '查看可用模型列表（/model 别名）', args: '<name>' },
-    { name: '/think', description: '查看或设置 thinking level', args: '<level>' },
-    { name: '/fast', description: '查看或设置 fast mode', args: '<status|on|off>' },
-    { name: '/verbose', description: '查看或设置 verbose level', args: '<on|off|full>' },
-    { name: '/compact', description: '压缩当前上游 session transcript' },
-    { name: '/help', description: '显示本地 slash 命令帮助' }
+    { name: '/new', description: t('command./new') },
+    { name: '/reset', description: t('command./reset') },
+    { name: '/model', description: t('command./model'), args: '<name>' },
+    { name: '/models', description: t('command./models'), args: '<name>' },
+    { name: '/think', description: t('command./think'), args: '<level>' },
+    { name: '/fast', description: t('command./fast'), args: '<status|on|off>' },
+    { name: '/verbose', description: t('command./verbose'), args: '<on|off|full>' },
+    { name: '/compact', description: t('command./compact') },
+    { name: '/help', description: t('command./help') }
   ];
 }
 
@@ -1553,7 +2188,7 @@ function renderCommandMenu() {
   if (!visibleCommands.length) {
     const empty = document.createElement('div');
     empty.className = 'command-menu-empty';
-    empty.textContent = '当前没有可用本地命令';
+    empty.textContent = t('status.noLocalCommands');
     commandMenuEl.append(empty);
     return;
   }
@@ -1570,7 +2205,7 @@ function renderCommandMenu() {
     section.append(title);
 
     for (const item of items) {
-      section.append(createCommandMenuItem(item));
+      section.append(createCommandMenuItem(localizeCommandItem(item)));
     }
 
     commandMenuEl.append(section);
@@ -1660,9 +2295,17 @@ function sortCommandCatalog(commands) {
 }
 
 function getCommandCategoryLabel(category) {
-  if (category === 'session') return 'Session';
-  if (category === 'model') return 'Model';
-  return 'Tools';
+  if (category === 'session') return t('command.session');
+  if (category === 'model') return t('command.model');
+  return t('command.tools');
+}
+
+function localizeCommandItem(item) {
+  if (!item) return item;
+  return {
+    ...item,
+    description: t(`command.${item.name}`) || item.description || ''
+  };
 }
 
 async function executeSlashCommand(command) {
@@ -1671,7 +2314,7 @@ async function executeSlashCommand(command) {
   const targetAgentId = state.activeAgentId;
   const context = { agentId: targetAgentId, sessionKey: targetSessionKey };
   beginSessionActivity(targetSessionKey);
-  showContextStatus(context, `正在执行 ${command.split(/\s+/, 1)[0]}…`, 'info');
+  showContextStatus(context, t('status.executingCommand', { name: command.split(/\s+/, 1)[0] }), 'info');
 
   try {
     const response = await apiPost(`/api/openclaw-webchat/sessions/${encodeURIComponent(targetSessionKey)}/command`, { command });
@@ -1683,7 +2326,7 @@ async function executeSlashCommand(command) {
     showContextStatus(context, buildSlashCommandSuccessMessage(command), 'success');
     await refreshAgents({ autoOpen: false });
   } catch (error) {
-    showContextStatus(context, `命令失败：${formatError(error)}`, 'error');
+    showContextStatus(context, t('status.commandFailed', { error: formatError(error) }), 'error');
   } finally {
     endSessionActivity(targetSessionKey);
     if (isOperationContextActive(context)) {
@@ -1694,9 +2337,9 @@ async function executeSlashCommand(command) {
 
 function buildSlashCommandSuccessMessage(command) {
   const name = getSlashCommandName(command);
-  if (name === '/new' || name === '/reset') return '上游上下文已重置，本地历史已保留。';
-  if (name === '/compact') return '压缩命令已执行。';
-  return `${name} 已执行。`;
+  if (name === '/new' || name === '/reset') return t('status.commandResetDone');
+  if (name === '/compact') return t('status.commandCompactDone');
+  return t('status.commandDone', { name });
 }
 
 function normalizeSlashCommandName(command) {
@@ -1719,8 +2362,8 @@ function updateHeader() {
   const active = getActiveAgent();
   chatTitleEl.textContent = active?.name || 'openclaw-webchat';
   chatSubtitleEl.textContent = active
-    ? `${active.hasSession ? '长期主时间线' : '点击后自动创建'} · ${active.summary || '暂无摘要'}`
-    : '选择 agent 开始聊天';
+    ? `${active.hasSession ? t('status.timelineLongLived') : t('status.clickToCreate')} · ${active.summary || t('status.noSummary')}`
+    : t('ui.selectAgent');
   headerPresenceEl.className = `presence-dot ${normalizePresence(active?.presence || 'idle')}`;
   if (!active) {
     state.historySearchOpen = false;
@@ -1753,8 +2396,8 @@ function createMessageAvatar(role) {
     return createAvatarElement({
       className: 'message-avatar user',
       avatarUrl: state.userProfile.avatarUrl,
-      label: state.userProfile.displayName || '我',
-      fallbackText: (state.userProfile.displayName || '我').slice(0, 1)
+      label: state.userProfile.displayName || (state.language === 'en' ? 'Me' : '我'),
+      fallbackText: (state.userProfile.displayName || (state.language === 'en' ? 'Me' : '我')).slice(0, 1)
     });
   }
 
@@ -1774,7 +2417,7 @@ function createAssistantProcessingRow() {
   const avatar = createMessageAvatar('assistant');
   const indicator = document.createElement('div');
   indicator.className = 'processing-indicator';
-  indicator.setAttribute('aria-label', 'agent 正在处理');
+  indicator.setAttribute('aria-label', t('status.processingAgent'));
 
   for (let index = 0; index < 3; index += 1) {
     const dot = document.createElement('span');
@@ -1968,7 +2611,7 @@ function renderPendingUploads() {
 
     const title = document.createElement('div');
     title.className = 'pending-upload-name';
-    title.textContent = attachment.name || (attachment.kind === 'audio' ? '未命名音频' : '未命名图片');
+    title.textContent = attachment.name || (attachment.kind === 'audio' ? t('status.unnamedAudio') : t('status.unnamedImage'));
 
     const subtitle = document.createElement('div');
     subtitle.className = 'pending-upload-hint';
@@ -1977,7 +2620,7 @@ function renderPendingUploads() {
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'pending-upload-remove';
-    remove.textContent = '移除';
+    remove.textContent = t('status.remove');
     remove.disabled = isActiveSessionBusy();
     remove.addEventListener('click', () => removePendingUpload(attachment.id));
 
@@ -1991,30 +2634,30 @@ function createPendingImagePreview(attachment) {
   const preview = document.createElement('img');
   preview.className = 'pending-upload-preview';
   preview.src = attachment.previewUrl || attachment.uploadedUrl || '';
-  preview.alt = attachment.name || '图片预览';
+  preview.alt = attachment.name || t('ui.imagePreview');
   return preview;
 }
 
 function createPendingAudioPreview() {
   const badge = document.createElement('div');
   badge.className = 'pending-upload-audio';
-  badge.textContent = '音频';
+  badge.textContent = t('status.audioLabel');
   return badge;
 }
 
 function buildPendingUploadHint(attachment) {
   if (attachment.kind === 'image') {
-    return attachment.source ? '已就绪，发送时会一并带上' : '发送时自动上传';
+    return attachment.source ? t('status.uploadReadyWithMessage') : t('status.uploadAutoImage');
   }
 
-  if (!attachment.source) return '发送时自动上传并转写';
+  if (!attachment.source) return t('status.uploadAutoAudio');
   if (attachment.transcriptStatus === 'ready' && attachment.transcriptText) {
-    return `转写完成 · ${summarizeText(attachment.transcriptText, 32)}`;
+    return t('status.transcriptReady', { summary: summarizeText(attachment.transcriptText, 32) });
   }
   if (attachment.transcriptStatus === 'failed') {
-    return attachment.transcriptError || '转写失败，仍会发送原音频';
+    return attachment.transcriptError || t('status.transcriptFailedSendAudio');
   }
-  return '已就绪，发送时会一并带上';
+  return t('status.uploadReadyWithMessage');
 }
 
 function removePendingUpload(uploadId) {
@@ -2057,7 +2700,7 @@ async function ensurePendingUploadsReady() {
       attachment.transcriptError = payload?.upload?.transcriptError || null;
       attachment.sizeBytes = payload?.upload?.size || attachment.sizeBytes;
       if (!attachment.source) {
-        throw new Error(`上传失败：${attachment.name || '附件'}`);
+        throw new Error(t('status.uploadFailed', { name: attachment.name || t('status.fileLabel') }));
       }
     }
 
@@ -2069,9 +2712,9 @@ async function ensurePendingUploadsReady() {
 
 function buildUploadProgressMessage(attachment, index) {
   if (attachment.kind === 'audio') {
-    return `正在上传并转写音频 ${index + 1}/${state.pendingUploads.length}…`;
+    return t('status.uploadingAudio', { index: index + 1, total: state.pendingUploads.length });
   }
-  return `正在上传图片 ${index + 1}/${state.pendingUploads.length}…`;
+  return t('status.uploadingImage', { index: index + 1, total: state.pendingUploads.length });
 }
 
 async function uploadPendingAttachment(attachment) {
@@ -2121,12 +2764,12 @@ function buildOptimisticBlocks(text, attachments) {
 function readFileAsBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error(`读取文件失败：${file?.name || 'unknown'}`));
+    reader.onerror = () => reject(new Error(t('status.readFileFailed', { name: file?.name || 'unknown' })));
     reader.onload = () => {
       const result = String(reader.result || '');
       const [, base64 = ''] = result.split(',', 2);
       if (!base64) {
-        reject(new Error(`读取文件失败：${file?.name || 'unknown'}`));
+        reject(new Error(t('status.readFileFailed', { name: file?.name || 'unknown' })));
         return;
       }
       resolve(base64);
@@ -2147,7 +2790,7 @@ async function cropAvatarToSquare(file, outputSize = 512) {
 
   const context = canvas.getContext('2d');
   if (!context) {
-    throw new Error('浏览器不支持头像裁剪。');
+    throw new Error(t('status.cropUnsupported'));
   }
 
   context.drawImage(image, sourceX, sourceY, side, side, 0, 0, outputSize, outputSize);
@@ -2159,7 +2802,7 @@ async function cropAvatarToSquare(file, outputSize = 512) {
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error(`读取文件失败：${file?.name || 'unknown'}`));
+    reader.onerror = () => reject(new Error(t('status.readFileFailed', { name: file?.name || 'unknown' })));
     reader.onload = () => resolve(String(reader.result || ''));
     reader.readAsDataURL(file);
   });
@@ -2169,7 +2812,7 @@ function loadImage(src) {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('图片加载失败，无法裁剪头像。'));
+    image.onerror = () => reject(new Error(t('status.imageCropLoadFailed')));
     image.src = src;
   });
 }
@@ -2178,7 +2821,7 @@ function canvasToBlob(canvas, mimeType, quality) {
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (!blob) {
-        reject(new Error('头像导出失败。'));
+        reject(new Error(t('status.avatarExportFailed')));
         return;
       }
       resolve(blob);
@@ -2211,7 +2854,7 @@ function openMediaViewer(block) {
   state.mediaViewerPointerId = null;
   state.mediaViewerMoved = false;
   mediaViewerImageEl.src = block.url;
-  mediaViewerImageEl.alt = block.name || '图片预览';
+  mediaViewerImageEl.alt = block.name || t('ui.imagePreview');
   mediaViewerEl.hidden = false;
   mediaViewerEl.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
@@ -2366,6 +3009,7 @@ function populateSettingsForm({ resetDraft = false } = {}) {
 }
 
 function loadServiceSettingsDraft() {
+  settingsLanguageSelectEl.value = state.language;
   state.settingsNetworkAccess = state.serviceSettings.networkAccess || 'local';
   state.settingsLightAuthEnabled = Boolean(state.serviceSettings.authEnabled);
   state.settingsLightAuthPassword = '';
@@ -2391,16 +3035,22 @@ function renderServiceSettingsForm() {
 
   const targetHost = state.settingsNetworkAccess === 'lan' ? '0.0.0.0' : '127.0.0.1';
   const needsRestart = targetHost !== state.serviceSettings.effectiveHost;
-  const modeLabel = state.settingsNetworkAccess === 'lan' ? '局域网 / Tailscale' : '仅本机';
-  const managerLabel = state.serviceSettings.hostManagedBy === 'env' ? '环境变量覆盖中' : '当前由设置文件管理';
-  settingsNetworkHintEl.textContent = `${modeLabel} 模式启动时会绑定 ${targetHost}。当前生效地址是 ${state.serviceSettings.effectiveHost}，${managerLabel}${needsRestart ? '，保存后需重启服务。' : '。'}`;
+  const modeLabel = state.settingsNetworkAccess === 'lan' ? t('ui.lanTailscale') : t('ui.localOnly');
+  const managerLabel = state.serviceSettings.hostManagedBy === 'env' ? t('status.networkManagerEnv') : t('status.networkManagerConfig');
+  settingsNetworkHintEl.textContent = t('status.networkHint', {
+    mode: modeLabel,
+    targetHost,
+    effectiveHost: state.serviceSettings.effectiveHost,
+    manager: managerLabel,
+    restart: needsRestart ? t('status.networkHintRestart') : '.'
+  });
 
   const hasExistingPassword = Boolean(state.serviceSettings.authConfigured);
   settingsLightAuthHintEl.textContent = state.settingsLightAuthEnabled
     ? hasExistingPassword
-      ? '轻认证已启用。留空表示保持当前口令；修改访问口令会立即刷新当前浏览器会话。'
-      : '首次启用轻认证时必须设置访问口令。'
-    : '默认关闭。建议在局域网访问模式下按需开启；Tailscale 环境也可额外叠加这一层。';
+      ? t('status.lightAuthEnabledHint')
+      : t('status.lightAuthFirstHint')
+    : t('status.lightAuthOffHint');
 
   settingsLightAuthPasswordInputEl.disabled = !state.settingsLightAuthEnabled;
   settingsLightAuthPasswordConfirmInputEl.disabled = !state.settingsLightAuthEnabled;
@@ -2408,12 +3058,12 @@ function renderServiceSettingsForm() {
   restartServiceButtonEl.disabled = !state.serviceSettings.restartSupported || state.restartingService;
   if (settingsDocumentAccessCopyEl) {
     settingsDocumentAccessCopyEl.textContent = state.serviceSettings.documentAccessMode === 'follow-openclaw'
-      ? '文档访问范围目前与 OpenClaw 中的设定保持相同，WebChat 不再额外限制。'
-      : '文档访问范围由 OpenClaw 自身决定。';
+      ? t('status.documentAccessFollow')
+      : t('status.documentAccessOpenClaw');
   }
   settingsRestartHintEl.textContent = state.serviceSettings.restartSupported
-    ? `监听地址切换必须重启后才会真正重新绑定；访问口令开关和口令修改可即时生效。可用重启命令：${state.serviceSettings.restartHint || '已由设置页接管'}`
-    : '当前环境不支持从设置页自动重启。监听地址切换必须手动重启；访问口令开关和口令修改可即时生效。';
+    ? t('status.restartHintSupported', { hint: state.serviceSettings.restartHint || 'n/a' })
+    : t('status.restartHintManual');
   renderManualStartGuide();
 }
 
@@ -2452,22 +3102,26 @@ function switchSettingsTab(tab) {
 
 function renderProjectInfo() {
   if (settingsAboutSummaryEl) {
-    settingsAboutSummaryEl.textContent = state.projectInfo.summary;
+    settingsAboutSummaryEl.textContent = t('text.projectSummary');
   }
   if (settingsGithubLinkEl) {
     settingsGithubLinkEl.href = state.projectInfo.githubUrl;
-    settingsGithubLinkEl.textContent = `${state.projectInfo.name} GitHub 仓库`;
+    settingsGithubLinkEl.textContent = state.language === 'en'
+      ? `${state.projectInfo.name} GitHub Repository`
+      : `${state.projectInfo.name} GitHub 仓库`;
   }
 }
 
 function renderManualStartGuide() {
   if (settingsManualStartIntroEl) {
     settingsManualStartIntroEl.textContent = state.serviceSettings.restartSupported
-      ? '如果你需要手动启动或恢复服务，可以按下面的步骤操作；已注册 LaunchAgent 时也可以直接执行重启命令。'
-      : '如果你需要手动启动或恢复服务，可以按下面的步骤操作。';
+      ? t('status.manualStartIntroSupported')
+      : t('status.manualStartIntro');
   }
   if (settingsManualStartProjectDirEl) {
-    settingsManualStartProjectDirEl.textContent = state.serviceSettings.manualStart.projectDirectoryHint;
+    settingsManualStartProjectDirEl.textContent = state.language === 'en'
+      ? 'Enter the openclaw-webchat project directory first'
+      : state.serviceSettings.manualStart.projectDirectoryHint;
   }
   if (settingsManualInstallCommandEl) {
     settingsManualInstallCommandEl.textContent = state.serviceSettings.manualStart.installCommand;
@@ -2476,7 +3130,7 @@ function renderManualStartGuide() {
     settingsManualStartCommandEl.textContent = state.serviceSettings.manualStart.startCommand;
   }
   if (settingsManualRestartCommandEl) {
-    settingsManualRestartCommandEl.textContent = state.serviceSettings.manualStart.restartCommand || '如果你使用自己的进程管理器，请按当前方式重启 openclaw-webchat。';
+    settingsManualRestartCommandEl.textContent = state.serviceSettings.manualStart.restartCommand || t('status.manualRestartFallback');
   }
 }
 
@@ -2486,9 +3140,9 @@ function getSettingsContacts() {
       key: 'user:self',
       kind: 'user',
       id: 'self',
-      name: state.userProfile.displayName || '我',
+      name: state.userProfile.displayName || (state.language === 'en' ? 'Me' : '我'),
       avatarUrl: state.userProfile.avatarUrl || null,
-      subtitle: '用户自己'
+      subtitle: t('status.selfSubtitle')
     },
     ...state.agents.map((agent) => ({
       key: `agent:${agent.agentId}`,
@@ -2524,7 +3178,7 @@ function renderSettingsContactOptions() {
   for (const contact of contacts) {
     const option = document.createElement('option');
     option.value = contact.key;
-    option.textContent = `${contact.name}${contact.kind === 'user' ? ' · 我' : ` · ${contact.id}`}`;
+    option.textContent = `${contact.name}${contact.kind === 'user' ? ` · ${state.language === 'en' ? 'Me' : '我'}` : ` · ${contact.id}`}`;
     settingsContactSelectEl.append(option);
   }
 
@@ -2537,7 +3191,7 @@ function loadSettingsDraft(contactKey) {
 
   resetSettingsAvatarDraft();
   state.settingsSelectedContactKey = target.key;
-  state.settingsDraftDisplayName = target.name || (target.kind === 'user' ? '我' : target.id);
+  state.settingsDraftDisplayName = target.name || (target.kind === 'user' ? (state.language === 'en' ? 'Me' : '我') : target.id);
   state.settingsDraftAvatarUrl = target.avatarUrl || null;
   state.settingsAvatarRemoved = false;
   settingsContactSelectEl.value = target.key;
@@ -2547,20 +3201,20 @@ function loadSettingsDraft(contactKey) {
 
 function renderSettingsPreview() {
   const target = resolveSettingsContact(state.settingsSelectedContactKey) || resolveSettingsContact(getDefaultSettingsContactKey());
-  const displayName = state.settingsDraftDisplayName.trim() || (target?.kind === 'user' ? '我' : target?.id || '联系人');
+  const displayName = state.settingsDraftDisplayName.trim() || (target?.kind === 'user' ? (state.language === 'en' ? 'Me' : '我') : target?.id || t('ui.contacts'));
   const avatarUrl = state.settingsDraftAvatarPreviewUrl || (state.settingsAvatarRemoved ? null : state.settingsDraftAvatarUrl);
 
   settingsAvatarPreviewEl.classList.toggle('agent', target?.kind === 'agent');
   renderAvatarPreview(settingsAvatarPreviewEl, avatarUrl, displayName);
   settingsPreviewTitleEl.textContent = displayName;
   settingsPreviewSubtitleEl.textContent = target?.kind === 'user'
-    ? '会同步到消息区里“我”的头像与名称'
-    : `会同步到 ${target?.id || 'agent'} 的左栏、顶部标题和消息头像`;
+    ? t('status.syncUserAvatar')
+    : t('status.syncAgentAvatar', { agent: target?.id || 'agent' });
   settingsAvatarHintEl.textContent = state.settingsDraftAvatarPreviewUrl
-    ? '头像已自动裁成正方形，点击保存后生效。'
+    ? t('status.avatarCropped')
     : state.settingsAvatarRemoved
-      ? '头像将在保存后移除。'
-      : '支持本地图片，保存时自动裁成正方形并上传。';
+      ? t('status.avatarWillRemove')
+      : t('text.avatarUploadHint');
 }
 
 function renderAvatarPreview(element, avatarUrl, label) {
@@ -2605,7 +3259,7 @@ async function handleSettingsAvatarSelection(event) {
   if (!file) return;
 
   if (!String(file.type || '').startsWith('image/')) {
-    showStatus('头像仅支持图片文件。', 'error');
+    showStatus(t('status.avatarOnlyImage'), 'error');
     return;
   }
 
@@ -2617,7 +3271,7 @@ async function handleSettingsAvatarSelection(event) {
     state.settingsAvatarRemoved = false;
     renderSettingsPreview();
   } catch (error) {
-    showStatus(`头像处理失败：${formatError(error)}`, 'error');
+    showStatus(t('status.avatarProcessFailed', { error: formatError(error) }), 'error');
   }
 }
 
@@ -2634,18 +3288,18 @@ async function saveSettingsContact() {
   try {
     let avatarUrl = state.settingsAvatarRemoved ? null : state.settingsDraftAvatarUrl;
     if (state.settingsDraftAvatarFile) {
-      showStatus('正在上传头像…', 'info');
+      showStatus(t('status.uploadingAvatar'), 'info');
       const upload = await uploadSettingsAvatar(state.settingsDraftAvatarFile, target);
       avatarUrl = upload?.upload?.source || avatarUrl;
     }
 
     if (target.kind === 'user') {
       const payload = await apiPatch('/api/openclaw-webchat/settings/user-profile', {
-        displayName: state.settingsDraftDisplayName.trim() || '我',
+        displayName: state.settingsDraftDisplayName.trim() || (state.language === 'en' ? 'Me' : '我'),
         avatarUrl
       });
       state.userProfile = {
-        displayName: payload?.userProfile?.displayName || '我',
+        displayName: payload?.userProfile?.displayName || (state.language === 'en' ? 'Me' : '我'),
         avatarUrl: payload?.userProfile?.avatarUrl || null
       };
     } else {
@@ -2663,9 +3317,9 @@ async function saveSettingsContact() {
     updateHeader();
     renderMessages();
     loadSettingsDraft(target.key);
-    showStatus('联系人设置已保存。', 'success');
+    showStatus(t('status.contactSettingsSaved'), 'success');
   } catch (error) {
-    showStatus(`保存失败：${formatError(error)}`, 'error');
+    showStatus(t('status.saveFailed', { error: formatError(error) }), 'error');
   } finally {
     saveSettingsButtonEl.disabled = false;
     settingsContactSelectEl.disabled = false;
@@ -2695,9 +3349,14 @@ async function saveServiceSettings() {
     state.authenticated = payload?.authStatus?.authenticated !== false;
     loadServiceSettingsDraft();
     renderAuthGate();
-    showStatus(payload?.message || '访问设置已保存。', payload?.restartRequired ? 'info' : 'success');
+    showStatus(
+      payload?.restartRequired
+        ? (state.language === 'en' ? 'Access settings saved. Restart the service for the bind-address change to take effect.' : '访问方式已保存，重启服务后生效。')
+        : t('status.accessSettingsSaved'),
+      payload?.restartRequired ? 'info' : 'success'
+    );
   } catch (error) {
-    showStatus(`访问设置保存失败：${formatError(error)}`, 'error');
+    showStatus(t('status.accessSettingsSaveFailed', { error: formatError(error) }), 'error');
   } finally {
     saveServiceSettingsButtonEl.disabled = false;
     settingsNetworkAccessSelectEl.disabled = false;
@@ -2714,9 +3373,9 @@ async function logoutLightAuthSession() {
     if (state.authEnabled && !state.authenticated) {
       lockAppForAuth();
     }
-    showStatus('当前浏览器已退出认证。', 'success');
+    showStatus(t('status.loggedOut'), 'success');
   } catch (error) {
-    showStatus(`退出认证失败：${formatError(error)}`, 'error');
+    showStatus(t('status.logoutFailed', { error: formatError(error) }), 'error');
   } finally {
     renderServiceSettingsForm();
   }
@@ -2727,16 +3386,16 @@ async function restartServiceFromSettings() {
   try {
     const payload = await apiPost('/api/openclaw-webchat/settings/restart', {});
     state.restartingService = true;
-    state.serviceRestartMessage = payload?.message || '服务正在重启，前端会自动等待恢复。';
+    state.serviceRestartMessage = t('status.restartingService');
     renderServiceRestartGate();
-    showStatus('服务正在重启…', 'info');
+    showStatus(t('status.restartingServiceShort'), 'info');
     await waitForServiceRecovery();
   } catch (error) {
     state.restartingService = false;
     state.serviceRestartMessage = '';
     renderServiceRestartGate();
     renderServiceSettingsForm();
-    showStatus(`重启服务失败：${formatError(error)}`, 'error');
+    showStatus(t('status.restartFailed', { error: formatError(error) }), 'error');
   }
 }
 
@@ -2752,7 +3411,7 @@ async function waitForServiceRecovery() {
       const response = await fetch('/healthz', { cache: 'no-store' });
       if (!response.ok) continue;
 
-      state.serviceRestartMessage = '服务已恢复，正在重新同步状态…';
+      state.serviceRestartMessage = t('status.serviceRecoveredSync');
       renderServiceRestartGate();
       await refreshAuthStatus();
 
@@ -2769,7 +3428,7 @@ async function waitForServiceRecovery() {
       state.serviceRestartMessage = '';
       renderServiceRestartGate();
       populateSettingsForm({ resetDraft: true });
-      showStatus('服务重启完成，已重新连接。', 'success');
+      showStatus(t('status.serviceRestartDone'), 'success');
       return;
     } catch {
       // still restarting
@@ -2779,7 +3438,7 @@ async function waitForServiceRecovery() {
   state.restartingService = false;
   state.serviceRestartMessage = '';
   renderServiceRestartGate();
-  showStatus('等待服务恢复超时，请手动刷新页面或稍后重试。', 'error');
+  showStatus(t('status.serviceRestartTimeout'), 'error');
 }
 
 function updateLocalAgentProfile(agentId, patch) {
@@ -2795,9 +3454,9 @@ function getActiveAgent() {
 }
 
 function getSendingStatusMessage() {
-  if (!state.pendingUploads.length) return '消息发送中…';
-  if (state.pendingUploads.some((item) => item.kind === 'audio')) return '正在处理附件并发送…';
-  return '正在上传附件并发送…';
+  if (!state.pendingUploads.length) return t('status.sendingMessage');
+  if (state.pendingUploads.some((item) => item.kind === 'audio')) return t('status.sendingAudioAttachments');
+  return t('status.sendingAttachments');
 }
 
 function showContextStatus(context, message, tone = 'info') {
@@ -2965,7 +3624,7 @@ async function handleResponse(response, { allowAuthFailure = false } = {}) {
   if (!response.ok) {
     if (response.status === 401 && !allowAuthFailure) {
       state.authenticated = false;
-      state.authError = '当前访问需要先完成认证。';
+      state.authError = t('status.authRequiredInline');
       lockAppForAuth();
     }
     throw new Error(data?.error || response.statusText || 'Request failed');
@@ -2990,15 +3649,15 @@ function normalizePresence(value) {
 }
 
 function formatPresenceLabel(value) {
-  if (value === 'running') return '处理中';
-  if (value === 'recent') return '刚回复';
-  return '待命';
+  if (value === 'running') return t('status.presenceRunning');
+  if (value === 'recent') return t('status.presenceRecent');
+  return t('status.presenceIdle');
 }
 
 function formatTime(value) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return '';
-  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleTimeString(state.language === 'en' ? 'en-US' : 'zh-CN', { hour: '2-digit', minute: '2-digit' });
 }
 
 function formatAgentTimestamp(value) {
@@ -3020,7 +3679,7 @@ function formatAgentTimestamp(value) {
 function formatSearchTimestamp(value) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return '';
-  return date.toLocaleString('zh-CN', {
+  return date.toLocaleString(state.language === 'en' ? 'en-US' : 'zh-CN', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -3043,5 +3702,21 @@ function summarizeText(text, maxLength = 48) {
 }
 
 function formatError(error) {
-  return error?.message || String(error || 'Unknown error');
+  return localizeErrorMessage(error?.message || String(error || 'Unknown error'));
+}
+
+function localizeErrorMessage(message) {
+  const raw = String(message || '').trim();
+  if (!raw || state.language !== 'en') return raw;
+
+  const known = new Map([
+    ['访问口令不正确。', 'The access password is incorrect.'],
+    ['两次输入的访问口令不一致。', 'The two access passwords do not match.'],
+    ['访问口令至少需要 4 个字符。', 'The access password must be at least 4 characters long.'],
+    ['首次启用访问口令时必须设置口令。', 'You must set a password when enabling access protection for the first time.'],
+    ['Authentication required.', 'Authentication required.'],
+    ['Invalid or expired token', 'Invalid or expired token.'],
+    ['Not found', 'Not found.']
+  ]);
+  return known.get(raw) || raw;
 }

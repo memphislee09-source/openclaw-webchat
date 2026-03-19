@@ -6,6 +6,7 @@
     <title>openclaw-webchat</title>
     <script>
       (() => {
+        const nextLanguageChoice = (stored) => stored === 'en' ? 'en' : 'zh-CN';
         const nextThemeChoice = (stored) => {
           if (stored === 'dark') return 'dark';
           if (stored === 'light-paper') return 'light-paper';
@@ -18,19 +19,23 @@
         };
 
         try {
+          const languageKey = 'openclaw-webchat-language';
           const key = 'openclaw-webchat-theme-choice';
           const legacyKey = 'openclaw-webchat-theme-mode';
+          const language = nextLanguageChoice(localStorage.getItem(languageKey));
           const stored = localStorage.getItem(key) || localStorage.getItem(legacyKey);
           const next = nextThemeChoice(stored);
+          document.documentElement.lang = language;
           document.documentElement.dataset.theme = next;
           document.documentElement.style.colorScheme = next === 'dark' ? 'dark' : 'light';
         } catch {
+          document.documentElement.lang = 'zh-CN';
           document.documentElement.dataset.theme = 'dark';
           document.documentElement.style.colorScheme = 'dark';
         }
       })();
     </script>
-    <link rel="stylesheet" href="/static/styles.css?v=20260319-settings-ia2" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260319-i18n1" />
   </head>
   <body>
     <div class="app-shell">
@@ -282,8 +287,9 @@
 
                     <label class="settings-field">
                       <span>界面语种</span>
-                      <select disabled>
-                        <option>简体中文（即将开放）</option>
+                      <select id="settingsLanguageSelect">
+                        <option value="zh-CN">简体中文</option>
+                        <option value="en">English</option>
                       </select>
                     </label>
 
@@ -451,6 +457,6 @@
       <div class="message-text"></div>
     </template>
 
-    <script type="module" src="/static/app.js?v=20260319-settings-ia2"></script>
+    <script type="module" src="/static/app.js?v=20260319-i18n1"></script>
   </body>
 </html>

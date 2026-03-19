@@ -5,7 +5,7 @@ A standalone WebChat for OpenClaw with long-lived per-agent history, local media
 `openclaw-webchat` 是一个独立于 OpenClaw 默认 WebUI 的 WebChat 项目，目标是在不深度耦合官方前端实现的前提下，提供更稳定的历史保留、富媒体体验和多会话隔离能力。
 
 ## Status
-- Current version: `0.1.3`
+- Current version: `0.1.4`
 - Stability: `alpha`
 - Default branch: `main`
 - Recommended deployment: local machine or private network behind Tailscale / equivalent access control
@@ -71,6 +71,7 @@ Useful environment variables:
 
 The settings UI now includes:
 - an Appearance section for theme presets
+- an interface language switch with Simplified Chinese and English
 - access mode switching between local-only and LAN / Tailscale-friendly binding
 - optional light authentication for shared LAN-style access
 - an About section with project summary and GitHub link
@@ -119,7 +120,7 @@ This script is a project-local example, not a universal installer.
 - [docs/ROADMAP.md](docs/ROADMAP.md): milestones and release direction
 - [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md): product requirements
 - [docs/error.md](docs/error.md): incident and fix log
-- [docs/HANDOFF-2026-03-18.md](docs/HANDOFF-2026-03-18.md): latest mainline handoff
+- [docs/HANDOFF-2026-03-19.md](docs/HANDOFF-2026-03-19.md): latest mainline handoff
 
 ## Development Checks
 ```bash

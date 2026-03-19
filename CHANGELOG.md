@@ -6,12 +6,15 @@ The format is intentionally lightweight and follows a simple versioned release l
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-03-19
+
 ### Changed
 - Bind the server explicitly to `127.0.0.1` by default, with `OPENCLAW_WEBCHAT_HOST` for intentional LAN access
 - Return opaque upload source handles to the browser instead of absolute filesystem paths
 - Add a settings-managed access mode switch for local-only versus LAN / Tailscale-friendly access
 - Add optional light authentication for personal LAN-style deployments
 - Reorganize settings into first-level sections for Contacts, Appearance, Access & Security, About, and Manual Start
+- Add Simplified Chinese / English interface switching from the Appearance settings
 - Add an About panel with project summary and GitHub link
 - Add a Manual Start panel with install/start/restart command hints
 - Align WebChat document-access messaging with the current OpenClaw configuration instead of a separate WebChat-only scope
