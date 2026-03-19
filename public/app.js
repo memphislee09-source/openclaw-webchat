@@ -4,6 +4,7 @@ const THEME_STORAGE_KEY = 'openclaw-webchat-theme-choice';
 const LEGACY_THEME_MODE_STORAGE_KEY = 'openclaw-webchat-theme-mode';
 const HISTORY_SEARCH_RECENTS_STORAGE_KEY = 'openclaw-webchat-history-search-recents';
 const HISTORY_SEARCH_MAX_RECENTS = 8;
+const SETTINGS_SECTIONS = ['contacts', 'preferences', 'access', 'about', 'manual-start'];
 const THEME_PRESETS = {
   dark: { name: '深色', mode: 'dark', hint: '夜间更稳，更适合低光环境。' },
   'light-paper': { name: 'Dawn Peach', mode: 'light', hint: '顶部带一点杏桃暖光，保留轻微色彩变化。' },
@@ -38,6 +39,13 @@ const state = {
   historySearchRequestId: 0,
   historySearchRecentQueries: [],
   historySearchShowingRecents: false,
+  appReady: false,
+  authEnabled: false,
+  authenticated: true,
+  authBusy: false,
+  authError: '',
+  restartingService: false,
+  serviceRestartMessage: '',
   settingsOpen: false,
   settingsExpandedSection: null,
   settingsSelectedContactKey: null,
@@ -46,6 +54,10 @@ const state = {
   settingsDraftAvatarFile: null,
   settingsDraftAvatarPreviewUrl: null,
   settingsAvatarRemoved: false,
+  settingsNetworkAccess: 'local',
+  settingsLightAuthEnabled: false,
+  settingsLightAuthPassword: '',
+  settingsLightAuthPasswordConfirm: '',
   mediaViewerOpen: false,
   mediaViewerScale: 1,
   mediaViewerOffsetX: 0,
@@ -60,6 +72,29 @@ const state = {
   userProfile: {
     displayName: '我',
     avatarUrl: null
+  },
+  projectInfo: {
+    name: 'openclaw-webchat',
+    summary: '一个面向个人使用的 OpenClaw WebChat，强调本地优先、长历史、媒体上传和更顺手的 agent 交流体验。',
+    githubUrl: 'https://github.com/memphislee09-source/openclaw-webchat'
+  },
+  serviceSettings: {
+    networkAccess: 'local',
+    effectiveHost: '127.0.0.1',
+    nextHost: '127.0.0.1',
+    hostManagedBy: 'config',
+    authEnabled: false,
+    authConfigured: false,
+    documentAccessMode: 'follow-openclaw',
+    restartRequired: false,
+    restartSupported: false,
+    restartHint: null,
+    manualStart: {
+      projectDirectoryHint: '先进入 openclaw-webchat 项目目录',
+      installCommand: 'npm install',
+      startCommand: 'npm start',
+      restartCommand: null
+    }
   }
 };
 
@@ -95,8 +130,14 @@ const settingsPanelEl = document.getElementById('settingsPanel');
 const closeSettingsButtonEl = document.getElementById('closeSettingsButton');
 const settingsContactsTabEl = document.getElementById('settingsContactsTab');
 const settingsPreferencesTabEl = document.getElementById('settingsPreferencesTab');
+const settingsAccessTabEl = document.getElementById('settingsAccessTab');
+const settingsAboutTabEl = document.getElementById('settingsAboutTab');
+const settingsManualStartTabEl = document.getElementById('settingsManualStartTab');
 const settingsContactsSectionEl = document.getElementById('settingsContactsSection');
 const settingsPreferencesSectionEl = document.getElementById('settingsPreferencesSection');
+const settingsAccessSectionEl = document.getElementById('settingsAccessSection');
+const settingsAboutSectionEl = document.getElementById('settingsAboutSection');
+const settingsManualStartSectionEl = document.getElementById('settingsManualStartSection');
 const settingsAvatarPreviewEl = document.getElementById('settingsAvatarPreview');
 const settingsPreviewTitleEl = document.getElementById('settingsPreviewTitle');
 const settingsPreviewSubtitleEl = document.getElementById('settingsPreviewSubtitle');
@@ -109,11 +150,36 @@ const settingsAvatarHintEl = document.getElementById('settingsAvatarHint');
 const saveSettingsButtonEl = document.getElementById('saveSettingsButton');
 const settingsThemePresetButtonsEl = document.getElementById('settingsThemePresetButtons');
 const settingsThemeHintEl = document.getElementById('settingsThemeHint');
+const settingsNetworkAccessSelectEl = document.getElementById('settingsNetworkAccessSelect');
+const settingsNetworkHintEl = document.getElementById('settingsNetworkHint');
+const settingsLightAuthToggleEl = document.getElementById('settingsLightAuthToggle');
+const settingsLightAuthPasswordInputEl = document.getElementById('settingsLightAuthPasswordInput');
+const settingsLightAuthPasswordConfirmInputEl = document.getElementById('settingsLightAuthPasswordConfirmInput');
+const settingsLightAuthHintEl = document.getElementById('settingsLightAuthHint');
+const saveServiceSettingsButtonEl = document.getElementById('saveServiceSettingsButton');
+const settingsLogoutButtonEl = document.getElementById('settingsLogoutButton');
+const restartServiceButtonEl = document.getElementById('restartServiceButton');
+const settingsRestartHintEl = document.getElementById('settingsRestartHint');
+const settingsDocumentAccessCopyEl = document.getElementById('settingsDocumentAccessCopy');
+const settingsAboutSummaryEl = document.getElementById('settingsAboutSummary');
+const settingsGithubLinkEl = document.getElementById('settingsGithubLink');
+const settingsManualStartIntroEl = document.getElementById('settingsManualStartIntro');
+const settingsManualStartProjectDirEl = document.getElementById('settingsManualStartProjectDir');
+const settingsManualInstallCommandEl = document.getElementById('settingsManualInstallCommand');
+const settingsManualStartCommandEl = document.getElementById('settingsManualStartCommand');
+const settingsManualRestartCommandEl = document.getElementById('settingsManualRestartCommand');
 const mediaViewerEl = document.getElementById('mediaViewer');
 const mediaViewerImageEl = document.getElementById('mediaViewerImage');
 const mediaZoomOutButtonEl = document.getElementById('mediaZoomOutButton');
 const mediaResetZoomButtonEl = document.getElementById('mediaResetZoomButton');
 const mediaZoomInButtonEl = document.getElementById('mediaZoomInButton');
+const authGateEl = document.getElementById('authGate');
+const authLoginFormEl = document.getElementById('authLoginForm');
+const authPasswordInputEl = document.getElementById('authPasswordInput');
+const authLoginButtonEl = document.getElementById('authLoginButton');
+const authLoginMessageEl = document.getElementById('authLoginMessage');
+const serviceRestartGateEl = document.getElementById('serviceRestartGate');
+const serviceRestartMessageEl = document.getElementById('serviceRestartMessage');
 const appShellEl = document.querySelector('.app-shell');
 
 state.themeChoice = getStoredThemeChoice();
@@ -124,12 +190,12 @@ boot().catch((error) => showStatus(`初始化失败：${formatError(error)}`, 'e
 async function boot() {
   bindEvents();
   autoResizeComposer();
-  await Promise.all([
-    loadSettings(),
-    loadCommandCatalog()
-  ]);
-  await refreshAgents({ autoOpen: true });
-  startPolling();
+  await refreshAuthStatus();
+  if (state.authEnabled && !state.authenticated) {
+    lockAppForAuth();
+    return;
+  }
+  await loadAuthenticatedApp();
 }
 
 function bindEvents() {
@@ -161,6 +227,9 @@ function bindEvents() {
   settingsBackdropEl.addEventListener('click', () => toggleSettingsPanel(false));
   settingsContactsTabEl.addEventListener('click', () => switchSettingsTab('contacts'));
   settingsPreferencesTabEl.addEventListener('click', () => switchSettingsTab('preferences'));
+  settingsAccessTabEl?.addEventListener('click', () => switchSettingsTab('access'));
+  settingsAboutTabEl?.addEventListener('click', () => switchSettingsTab('about'));
+  settingsManualStartTabEl?.addEventListener('click', () => switchSettingsTab('manual-start'));
   settingsContactSelectEl.addEventListener('change', () => loadSettingsDraft(settingsContactSelectEl.value));
   settingsDisplayNameInputEl.addEventListener('input', () => {
     state.settingsDraftDisplayName = settingsDisplayNameInputEl.value;
@@ -171,6 +240,14 @@ function bindEvents() {
   settingsAvatarFileInputEl.addEventListener('change', handleSettingsAvatarSelection);
   saveSettingsButtonEl.addEventListener('click', saveSettingsContact);
   settingsThemePresetButtonsEl?.addEventListener('click', handleThemePresetClick);
+  settingsNetworkAccessSelectEl?.addEventListener('change', handleServiceSettingsDraftChange);
+  settingsLightAuthToggleEl?.addEventListener('change', handleServiceSettingsDraftChange);
+  settingsLightAuthPasswordInputEl?.addEventListener('input', handleServiceSettingsDraftChange);
+  settingsLightAuthPasswordConfirmInputEl?.addEventListener('input', handleServiceSettingsDraftChange);
+  saveServiceSettingsButtonEl?.addEventListener('click', saveServiceSettings);
+  settingsLogoutButtonEl?.addEventListener('click', logoutLightAuthSession);
+  restartServiceButtonEl?.addEventListener('click', restartServiceFromSettings);
+  authLoginFormEl?.addEventListener('submit', handleAuthLoginSubmit);
   mediaViewerEl.addEventListener('click', closeMediaViewer);
   mediaViewerEl.addEventListener('wheel', handleMediaViewerWheel, { passive: false });
   mediaViewerImageEl.addEventListener('click', handleMediaViewerImageClick);
@@ -205,8 +282,14 @@ async function loadSettings() {
       displayName: payload?.userProfile?.displayName || '我',
       avatarUrl: payload?.userProfile?.avatarUrl || null
     };
+    state.serviceSettings = normalizeServiceSettings(payload?.serviceSettings);
+    state.projectInfo = normalizeProjectInfo(payload?.projectInfo);
+    state.authEnabled = Boolean(payload?.authStatus?.enabled || state.serviceSettings.authEnabled);
+    state.authenticated = payload?.authStatus?.authenticated !== false;
   } catch {
     state.userProfile = { displayName: '我', avatarUrl: null };
+    state.serviceSettings = normalizeServiceSettings(null);
+    state.projectInfo = normalizeProjectInfo(null);
   }
 
   populateSettingsForm();
@@ -324,6 +407,141 @@ function renderThemePresetControls() {
   if (settingsThemeHintEl) {
     const theme = THEME_PRESETS[state.themeChoice] || THEME_PRESETS.dark;
     settingsThemeHintEl.textContent = `当前使用 ${theme.name}。${theme.hint} 主题偏好会保存在当前浏览器。`;
+  }
+}
+
+function normalizeServiceSettings(payload) {
+  return {
+    networkAccess: payload?.networkAccess === 'lan' ? 'lan' : 'local',
+    effectiveHost: payload?.effectiveHost || '127.0.0.1',
+    nextHost: payload?.nextHost || payload?.effectiveHost || '127.0.0.1',
+    hostManagedBy: payload?.hostManagedBy || 'config',
+    authEnabled: payload?.authEnabled === true,
+    authConfigured: payload?.authConfigured === true,
+    documentAccessMode: payload?.documentAccessMode === 'follow-openclaw' ? 'follow-openclaw' : 'follow-openclaw',
+    restartRequired: payload?.restartRequired === true,
+    restartSupported: payload?.restartSupported === true,
+    restartHint: payload?.restartHint || null,
+    manualStart: {
+      projectDirectoryHint: payload?.manualStart?.projectDirectoryHint || '先进入 openclaw-webchat 项目目录',
+      installCommand: payload?.manualStart?.installCommand || 'npm install',
+      startCommand: payload?.manualStart?.startCommand || 'npm start',
+      restartCommand: payload?.manualStart?.restartCommand || null
+    }
+  };
+}
+
+function normalizeProjectInfo(payload) {
+  return {
+    name: payload?.name || 'openclaw-webchat',
+    summary: payload?.summary || '一个面向个人使用的 OpenClaw WebChat，强调本地优先、长历史、媒体上传和更顺手的 agent 交流体验。',
+    githubUrl: payload?.githubUrl || 'https://github.com/memphislee09-source/openclaw-webchat'
+  };
+}
+
+async function refreshAuthStatus() {
+  try {
+    const payload = await apiGetPublic('/api/openclaw-webchat/auth/status');
+    state.authEnabled = payload?.enabled === true;
+    state.authenticated = payload?.authenticated !== false;
+    if (payload?.mode) {
+      state.serviceSettings = {
+        ...state.serviceSettings,
+        networkAccess: payload.mode === 'lan' ? 'lan' : 'local',
+        effectiveHost: payload?.effectiveHost || state.serviceSettings.effectiveHost
+      };
+    }
+    state.authError = '';
+  } catch (error) {
+    state.authEnabled = false;
+    state.authenticated = true;
+    state.authError = formatError(error);
+  }
+
+  renderAuthGate();
+}
+
+async function loadAuthenticatedApp({ force = false } = {}) {
+  if (state.appReady && !force) return;
+
+  await Promise.all([
+    loadSettings(),
+    loadCommandCatalog()
+  ]);
+  await refreshAgents({ autoOpen: true });
+  startPolling();
+  state.appReady = true;
+  renderAuthGate();
+  syncComposerInteractivity();
+}
+
+function lockAppForAuth() {
+  state.appReady = false;
+  releasePendingUploads(state.pendingUploads);
+  state.agents = [];
+  state.activeAgentId = null;
+  state.activeSessionKey = null;
+  state.messages = [];
+  state.pendingUploads = [];
+  state.nextBefore = null;
+  state.hasMore = false;
+  clearInterval(state.pollingTimer);
+  state.pollingTimer = null;
+  renderAgentList({ refreshIdentity: false });
+  renderMessages();
+  updateHeader();
+  renderAuthGate();
+  renderServiceRestartGate();
+  syncComposerInteractivity();
+  showStatus('已开启访问口令，请先完成认证。', 'info');
+}
+
+function renderAuthGate() {
+  const open = state.authEnabled && !state.authenticated;
+  authGateEl?.classList.toggle('hidden', !open);
+  authGateEl?.setAttribute('aria-hidden', open ? 'false' : 'true');
+  appShellEl?.classList.toggle('auth-locked', open);
+
+  if (!authLoginButtonEl || !authLoginMessageEl) return;
+  authLoginButtonEl.disabled = state.authBusy;
+  authPasswordInputEl.disabled = state.authBusy;
+  authLoginMessageEl.textContent = state.authError || '如果你通过 Tailscale 访问，这里的口令仍由当前实例单独控制。';
+}
+
+function renderServiceRestartGate() {
+  const open = state.restartingService;
+  serviceRestartGateEl?.classList.toggle('hidden', !open);
+  serviceRestartGateEl?.setAttribute('aria-hidden', open ? 'false' : 'true');
+  appShellEl?.classList.toggle('service-restarting', open);
+  if (serviceRestartMessageEl) {
+    serviceRestartMessageEl.textContent = state.serviceRestartMessage || '正在等待 WebChat 服务重新启动并恢复连接…';
+  }
+}
+
+async function handleAuthLoginSubmit(event) {
+  event.preventDefault();
+  const password = authPasswordInputEl?.value || '';
+  if (!password) {
+    state.authError = '请输入访问口令。';
+    renderAuthGate();
+    return;
+  }
+
+  state.authBusy = true;
+  state.authError = '';
+  renderAuthGate();
+
+  try {
+    await apiPostPublic('/api/openclaw-webchat/auth/login', { password });
+    if (authPasswordInputEl) authPasswordInputEl.value = '';
+    state.authBusy = false;
+    await refreshAuthStatus();
+    await loadAuthenticatedApp({ force: true });
+    showStatus('认证成功。', 'success');
+  } catch (error) {
+    state.authBusy = false;
+    state.authError = formatError(error);
+    renderAuthGate();
   }
 }
 
@@ -2129,6 +2347,12 @@ function populateSettingsForm({ resetDraft = false } = {}) {
   renderSettingsTabs();
   renderThemePresetControls();
   renderSettingsContactOptions();
+  renderProjectInfo();
+  if (resetDraft) {
+    loadServiceSettingsDraft();
+  } else {
+    renderServiceSettingsForm();
+  }
 
   const currentKey = resolveValidSettingsContactKey(state.settingsSelectedContactKey);
   if (resetDraft || currentKey !== state.settingsSelectedContactKey) {
@@ -2141,24 +2365,119 @@ function populateSettingsForm({ resetDraft = false } = {}) {
   renderSettingsPreview();
 }
 
+function loadServiceSettingsDraft() {
+  state.settingsNetworkAccess = state.serviceSettings.networkAccess || 'local';
+  state.settingsLightAuthEnabled = Boolean(state.serviceSettings.authEnabled);
+  state.settingsLightAuthPassword = '';
+  state.settingsLightAuthPasswordConfirm = '';
+  renderServiceSettingsForm();
+}
+
+function handleServiceSettingsDraftChange() {
+  state.settingsNetworkAccess = settingsNetworkAccessSelectEl?.value === 'lan' ? 'lan' : 'local';
+  state.settingsLightAuthEnabled = Boolean(settingsLightAuthToggleEl?.checked);
+  state.settingsLightAuthPassword = settingsLightAuthPasswordInputEl?.value || '';
+  state.settingsLightAuthPasswordConfirm = settingsLightAuthPasswordConfirmInputEl?.value || '';
+  renderServiceSettingsForm();
+}
+
+function renderServiceSettingsForm() {
+  if (!settingsNetworkAccessSelectEl) return;
+
+  settingsNetworkAccessSelectEl.value = state.settingsNetworkAccess;
+  settingsLightAuthToggleEl.checked = state.settingsLightAuthEnabled;
+  settingsLightAuthPasswordInputEl.value = state.settingsLightAuthPassword;
+  settingsLightAuthPasswordConfirmInputEl.value = state.settingsLightAuthPasswordConfirm;
+
+  const targetHost = state.settingsNetworkAccess === 'lan' ? '0.0.0.0' : '127.0.0.1';
+  const needsRestart = targetHost !== state.serviceSettings.effectiveHost;
+  const modeLabel = state.settingsNetworkAccess === 'lan' ? '局域网 / Tailscale' : '仅本机';
+  const managerLabel = state.serviceSettings.hostManagedBy === 'env' ? '环境变量覆盖中' : '当前由设置文件管理';
+  settingsNetworkHintEl.textContent = `${modeLabel} 模式启动时会绑定 ${targetHost}。当前生效地址是 ${state.serviceSettings.effectiveHost}，${managerLabel}${needsRestart ? '，保存后需重启服务。' : '。'}`;
+
+  const hasExistingPassword = Boolean(state.serviceSettings.authConfigured);
+  settingsLightAuthHintEl.textContent = state.settingsLightAuthEnabled
+    ? hasExistingPassword
+      ? '轻认证已启用。留空表示保持当前口令；修改访问口令会立即刷新当前浏览器会话。'
+      : '首次启用轻认证时必须设置访问口令。'
+    : '默认关闭。建议在局域网访问模式下按需开启；Tailscale 环境也可额外叠加这一层。';
+
+  settingsLightAuthPasswordInputEl.disabled = !state.settingsLightAuthEnabled;
+  settingsLightAuthPasswordConfirmInputEl.disabled = !state.settingsLightAuthEnabled;
+  settingsLogoutButtonEl.disabled = !state.authEnabled || !state.authenticated;
+  restartServiceButtonEl.disabled = !state.serviceSettings.restartSupported || state.restartingService;
+  if (settingsDocumentAccessCopyEl) {
+    settingsDocumentAccessCopyEl.textContent = state.serviceSettings.documentAccessMode === 'follow-openclaw'
+      ? '文档访问范围目前与 OpenClaw 中的设定保持相同，WebChat 不再额外限制。'
+      : '文档访问范围由 OpenClaw 自身决定。';
+  }
+  settingsRestartHintEl.textContent = state.serviceSettings.restartSupported
+    ? `监听地址切换必须重启后才会真正重新绑定；访问口令开关和口令修改可即时生效。可用重启命令：${state.serviceSettings.restartHint || '已由设置页接管'}`
+    : '当前环境不支持从设置页自动重启。监听地址切换必须手动重启；访问口令开关和口令修改可即时生效。';
+  renderManualStartGuide();
+}
+
 function renderSettingsTabs() {
-  const isContacts = state.settingsExpandedSection === 'contacts';
-  const isPreferences = state.settingsExpandedSection === 'preferences';
-  settingsContactsTabEl.classList.toggle('active', isContacts);
-  settingsPreferencesTabEl.classList.toggle('active', isPreferences);
-  settingsContactsTabEl.setAttribute('aria-expanded', isContacts ? 'true' : 'false');
-  settingsPreferencesTabEl.setAttribute('aria-expanded', isPreferences ? 'true' : 'false');
-  settingsContactsSectionEl.hidden = !isContacts;
-  settingsPreferencesSectionEl.hidden = !isPreferences;
+  const tabs = {
+    contacts: settingsContactsTabEl,
+    preferences: settingsPreferencesTabEl,
+    access: settingsAccessTabEl,
+    about: settingsAboutTabEl,
+    'manual-start': settingsManualStartTabEl
+  };
+  const panels = {
+    contacts: settingsContactsSectionEl,
+    preferences: settingsPreferencesSectionEl,
+    access: settingsAccessSectionEl,
+    about: settingsAboutSectionEl,
+    'manual-start': settingsManualStartSectionEl
+  };
+
+  for (const section of SETTINGS_SECTIONS) {
+    const active = state.settingsExpandedSection === section;
+    tabs[section]?.classList.toggle('active', active);
+    tabs[section]?.setAttribute('aria-expanded', active ? 'true' : 'false');
+    if (panels[section]) panels[section].hidden = !active;
+  }
 }
 
 function switchSettingsTab(tab) {
-  const next = tab === 'preferences' ? 'preferences' : 'contacts';
+  const next = SETTINGS_SECTIONS.includes(tab) ? tab : 'contacts';
   state.settingsExpandedSection = state.settingsExpandedSection === next ? null : next;
   if (state.settingsExpandedSection === 'contacts' && !state.settingsSelectedContactKey) {
     loadSettingsDraft(getDefaultSettingsContactKey());
   }
   renderSettingsTabs();
+}
+
+function renderProjectInfo() {
+  if (settingsAboutSummaryEl) {
+    settingsAboutSummaryEl.textContent = state.projectInfo.summary;
+  }
+  if (settingsGithubLinkEl) {
+    settingsGithubLinkEl.href = state.projectInfo.githubUrl;
+    settingsGithubLinkEl.textContent = `${state.projectInfo.name} GitHub 仓库`;
+  }
+}
+
+function renderManualStartGuide() {
+  if (settingsManualStartIntroEl) {
+    settingsManualStartIntroEl.textContent = state.serviceSettings.restartSupported
+      ? '如果你需要手动启动或恢复服务，可以按下面的步骤操作；已注册 LaunchAgent 时也可以直接执行重启命令。'
+      : '如果你需要手动启动或恢复服务，可以按下面的步骤操作。';
+  }
+  if (settingsManualStartProjectDirEl) {
+    settingsManualStartProjectDirEl.textContent = state.serviceSettings.manualStart.projectDirectoryHint;
+  }
+  if (settingsManualInstallCommandEl) {
+    settingsManualInstallCommandEl.textContent = state.serviceSettings.manualStart.installCommand;
+  }
+  if (settingsManualStartCommandEl) {
+    settingsManualStartCommandEl.textContent = state.serviceSettings.manualStart.startCommand;
+  }
+  if (settingsManualRestartCommandEl) {
+    settingsManualRestartCommandEl.textContent = state.serviceSettings.manualStart.restartCommand || '如果你使用自己的进程管理器，请按当前方式重启 openclaw-webchat。';
+  }
 }
 
 function getSettingsContacts() {
@@ -2356,6 +2675,113 @@ async function saveSettingsContact() {
   }
 }
 
+async function saveServiceSettings() {
+  saveServiceSettingsButtonEl.disabled = true;
+  settingsNetworkAccessSelectEl.disabled = true;
+  settingsLightAuthToggleEl.disabled = true;
+  settingsLightAuthPasswordInputEl.disabled = true;
+  settingsLightAuthPasswordConfirmInputEl.disabled = true;
+
+  try {
+    const payload = await apiPatch('/api/openclaw-webchat/settings/service', {
+      networkAccess: state.settingsNetworkAccess,
+      authEnabled: state.settingsLightAuthEnabled,
+      authPassword: state.settingsLightAuthPassword,
+      authPasswordConfirm: state.settingsLightAuthPasswordConfirm
+    });
+
+    state.serviceSettings = normalizeServiceSettings(payload?.serviceSettings);
+    state.authEnabled = payload?.authStatus?.enabled === true;
+    state.authenticated = payload?.authStatus?.authenticated !== false;
+    loadServiceSettingsDraft();
+    renderAuthGate();
+    showStatus(payload?.message || '访问设置已保存。', payload?.restartRequired ? 'info' : 'success');
+  } catch (error) {
+    showStatus(`访问设置保存失败：${formatError(error)}`, 'error');
+  } finally {
+    saveServiceSettingsButtonEl.disabled = false;
+    settingsNetworkAccessSelectEl.disabled = false;
+    settingsLightAuthToggleEl.disabled = false;
+    renderServiceSettingsForm();
+  }
+}
+
+async function logoutLightAuthSession() {
+  settingsLogoutButtonEl.disabled = true;
+  try {
+    await apiPostPublic('/api/openclaw-webchat/auth/logout', {});
+    await refreshAuthStatus();
+    if (state.authEnabled && !state.authenticated) {
+      lockAppForAuth();
+    }
+    showStatus('当前浏览器已退出认证。', 'success');
+  } catch (error) {
+    showStatus(`退出认证失败：${formatError(error)}`, 'error');
+  } finally {
+    renderServiceSettingsForm();
+  }
+}
+
+async function restartServiceFromSettings() {
+  restartServiceButtonEl.disabled = true;
+  try {
+    const payload = await apiPost('/api/openclaw-webchat/settings/restart', {});
+    state.restartingService = true;
+    state.serviceRestartMessage = payload?.message || '服务正在重启，前端会自动等待恢复。';
+    renderServiceRestartGate();
+    showStatus('服务正在重启…', 'info');
+    await waitForServiceRecovery();
+  } catch (error) {
+    state.restartingService = false;
+    state.serviceRestartMessage = '';
+    renderServiceRestartGate();
+    renderServiceSettingsForm();
+    showStatus(`重启服务失败：${formatError(error)}`, 'error');
+  }
+}
+
+async function waitForServiceRecovery() {
+  const timeoutMs = 45000;
+  const intervalMs = 1200;
+  const start = Date.now();
+
+  while (Date.now() - start < timeoutMs) {
+    await delay(intervalMs);
+
+    try {
+      const response = await fetch('/healthz', { cache: 'no-store' });
+      if (!response.ok) continue;
+
+      state.serviceRestartMessage = '服务已恢复，正在重新同步状态…';
+      renderServiceRestartGate();
+      await refreshAuthStatus();
+
+      if (state.authEnabled && !state.authenticated) {
+        state.restartingService = false;
+        state.serviceRestartMessage = '';
+        renderServiceRestartGate();
+        lockAppForAuth();
+        return;
+      }
+
+      await loadAuthenticatedApp({ force: true });
+      state.restartingService = false;
+      state.serviceRestartMessage = '';
+      renderServiceRestartGate();
+      populateSettingsForm({ resetDraft: true });
+      showStatus('服务重启完成，已重新连接。', 'success');
+      return;
+    } catch {
+      // still restarting
+    }
+  }
+
+  state.restartingService = false;
+  state.serviceRestartMessage = '';
+  renderServiceRestartGate();
+  showStatus('等待服务恢复超时，请手动刷新页面或稍后重试。', 'error');
+}
+
 function updateLocalAgentProfile(agentId, patch) {
   state.agents = state.agents.map((agent) => (
     agent.agentId === agentId
@@ -2423,7 +2849,7 @@ function autoResizeComposer() {
 }
 
 function syncComposerInteractivity() {
-  setComposerEnabled(Boolean(state.activeSessionKey) && !isActiveSessionBusy());
+  setComposerEnabled(Boolean(state.activeSessionKey) && !isActiveSessionBusy() && (!state.authEnabled || state.authenticated));
 }
 
 function setComposerEnabled(enabled) {
@@ -2492,6 +2918,11 @@ async function apiGet(url) {
   return handleResponse(response);
 }
 
+async function apiGetPublic(url) {
+  const response = await fetch(url, { headers: { accept: 'application/json' } });
+  return handleResponse(response, { allowAuthFailure: true });
+}
+
 async function apiPost(url, body) {
   const response = await fetch(url, {
     method: 'POST',
@@ -2502,6 +2933,18 @@ async function apiPost(url, body) {
     body: JSON.stringify(body || {})
   });
   return handleResponse(response);
+}
+
+async function apiPostPublic(url, body) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json'
+    },
+    body: JSON.stringify(body || {})
+  });
+  return handleResponse(response, { allowAuthFailure: true });
 }
 
 async function apiPatch(url, body) {
@@ -2516,10 +2959,15 @@ async function apiPatch(url, body) {
   return handleResponse(response);
 }
 
-async function handleResponse(response) {
+async function handleResponse(response, { allowAuthFailure = false } = {}) {
   const text = await response.text();
   const data = text ? safeJsonParse(text) : null;
   if (!response.ok) {
+    if (response.status === 401 && !allowAuthFailure) {
+      state.authenticated = false;
+      state.authError = '当前访问需要先完成认证。';
+      lockAppForAuth();
+    }
     throw new Error(data?.error || response.statusText || 'Request failed');
   }
   return data;
@@ -2531,6 +2979,10 @@ function safeJsonParse(text) {
   } catch {
     return null;
   }
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function normalizePresence(value) {

@@ -15,6 +15,11 @@ const app = express();
 const PORT = Number(process.env.OPENCLAW_WEBCHAT_PORT || 3770);
 const OPENCLAW_BIN = process.env.OPENCLAW_BIN || 'openclaw';
 const DATA_DIR = path.resolve(process.env.OPENCLAW_WEBCHAT_DATA_DIR || path.resolve(__dirname, '../data'));
+ensureDir(DATA_DIR);
+const SERVICE_CONFIG_FILE = path.join(DATA_DIR, 'service-config.json');
+ensureJsonFile(SERVICE_CONFIG_FILE, JSON.stringify(defaultServiceConfig(), null, 2));
+let serviceConfig = sanitizeServiceConfig(readJson(SERVICE_CONFIG_FILE));
+const HOST = normalizeOptionalString(process.env.OPENCLAW_WEBCHAT_HOST) || resolveHostForAccessMode(serviceConfig.networkAccess);
 const BINDINGS_FILE = path.join(DATA_DIR, 'session-bindings.json');
 const PROFILES_FILE = path.join(DATA_DIR, 'agent-profiles.json');
 const USER_PROFILE_FILE = path.join(DATA_DIR, 'user-profile.json');
@@ -33,7 +38,16 @@ const MAX_AUDIO_UPLOAD_BYTES = Number(process.env.OPENCLAW_WEBCHAT_MAX_AUDIO_UPL
 const WHISPER_BIN = process.env.OPENCLAW_WEBCHAT_WHISPER_BIN || 'whisper';
 const WHISPER_MODEL = process.env.OPENCLAW_WEBCHAT_WHISPER_MODEL || 'tiny';
 const WHISPER_TIMEOUT_MS = Number(process.env.OPENCLAW_WEBCHAT_WHISPER_TIMEOUT_MS || 45000);
+const UPLOAD_SOURCE_PREFIX = 'openclaw-upload:';
+const AUTH_COOKIE_NAME = 'openclaw_webchat_auth';
+const AUTH_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const PROJECT_GITHUB_URL = normalizeOptionalString(process.env.OPENCLAW_WEBCHAT_GITHUB_URL)
+  || 'https://github.com/memphislee09-source/openclaw-webchat';
+const RESTART_LABEL = normalizeOptionalString(process.env.OPENCLAW_WEBCHAT_LAUNCHD_LABEL)
+  || normalizeOptionalString(process.env.XPC_SERVICE_NAME)
+  || 'ai.openclaw.webchat';
 const lateReplyReconciliations = new Set();
+const authSessions = new Map();
 
 const BOOTSTRAP_TEXT = [
   '[openclaw-webchat hidden bootstrap]',
@@ -68,7 +82,6 @@ app.use('/static', express.static(path.resolve(__dirname, '../public'), {
   }
 }));
 
-ensureDir(DATA_DIR);
 ensureDir(HISTORY_DIR);
 ensureDir(UPLOADS_DIR);
 ensureJsonFile(BINDINGS_FILE, '{}');
@@ -78,6 +91,58 @@ const MEDIA_SECRET = resolveMediaSecret();
 
 app.get('/healthz', (_req, res) => {
   res.json({ ok: true, service: NAMESPACE, port: PORT, namespace: NAMESPACE });
+});
+
+app.get('/api/openclaw-webchat/auth/status', (req, res) => {
+  const auth = getRequestAuthState(req);
+  res.json({
+    enabled: isLightAuthEnabled(),
+    authenticated: auth.authenticated,
+    expiresAt: auth.expiresAt,
+    mode: serviceConfig.networkAccess,
+    effectiveHost: HOST
+  });
+});
+
+app.post('/api/openclaw-webchat/auth/login', (req, res) => {
+  if (!isLightAuthEnabled()) {
+    return res.status(400).json({ error: 'Light auth is not enabled.' });
+  }
+
+  const password = String(req.body?.password ?? '');
+  if (!verifyLightAuthPassword(password)) {
+    return res.status(401).json({ error: '访问口令不正确。' });
+  }
+
+  const session = createAuthSession();
+  setAuthCookie(res, session.token, session.expiresAt);
+  res.json({
+    ok: true,
+    authenticated: true,
+    expiresAt: session.expiresAt
+  });
+});
+
+app.post('/api/openclaw-webchat/auth/logout', (req, res) => {
+  const token = readAuthTokenFromRequest(req);
+  if (token) {
+    authSessions.delete(token);
+  }
+  clearAuthCookie(res);
+  res.json({ ok: true });
+});
+
+app.use((req, res, next) => {
+  if (!isLightAuthEnabled()) return next();
+  if (isPublicRequest(req)) return next();
+
+  const auth = getRequestAuthState(req);
+  if (auth.authenticated) {
+    req.webchatAuth = auth;
+    return next();
+  }
+
+  res.status(401).json({ error: 'Authentication required.', code: 'AUTH_REQUIRED' });
 });
 
 app.get('/api/openclaw-webchat/commands', (_req, res) => {
@@ -236,13 +301,19 @@ app.patch('/api/openclaw-webchat/agents/:agentId/profile', (req, res) => {
   }
 });
 
-app.get('/api/openclaw-webchat/settings', (_req, res) => {
+app.get('/api/openclaw-webchat/settings', (req, res) => {
   try {
     const userProfile = readJson(USER_PROFILE_FILE);
     res.json({
       userProfile: {
         ...userProfile,
         avatarUrl: presentAvatarUrl(userProfile.avatarUrl)
+      },
+      serviceSettings: presentServiceSettings(),
+      projectInfo: presentProjectInfo(),
+      authStatus: {
+        enabled: isLightAuthEnabled(),
+        authenticated: getRequestAuthState(req).authenticated
       }
     });
   } catch (error) {
@@ -271,6 +342,102 @@ app.patch('/api/openclaw-webchat/settings/user-profile', (req, res) => {
   } catch (error) {
     res.status(500).json({ error: formatError(error) });
   }
+});
+
+app.patch('/api/openclaw-webchat/settings/service', (req, res) => {
+  const requestedMode = normalizeNetworkAccessMode(req.body?.networkAccess) || serviceConfig.networkAccess;
+  const authEnabled = req.body?.authEnabled === true;
+  const authPassword = String(req.body?.authPassword ?? '');
+  const authPasswordConfirm = String(req.body?.authPasswordConfirm ?? '');
+
+  if (authPassword || authPasswordConfirm) {
+    if (authPassword !== authPasswordConfirm) {
+      return res.status(400).json({ error: '两次输入的访问口令不一致。' });
+    }
+    if (authPassword.length < 4) {
+      return res.status(400).json({ error: '访问口令至少需要 4 个字符。' });
+    }
+  }
+
+  const next = {
+    ...serviceConfig,
+    networkAccess: requestedMode,
+    updatedAt: new Date().toISOString(),
+    auth: {
+      ...serviceConfig.auth,
+      enabled: authEnabled
+    }
+  };
+
+  const passwordChanged = authEnabled && Boolean(authPassword);
+  if (passwordChanged) {
+    const hashed = hashLightAuthPassword(authPassword);
+    next.auth.passwordSalt = hashed.salt;
+    next.auth.passwordHash = hashed.hash;
+  }
+
+  if (authEnabled && !next.auth.passwordHash) {
+    return res.status(400).json({ error: '首次启用访问口令时必须设置口令。' });
+  }
+
+  if (!authEnabled) {
+    next.auth.enabled = false;
+  }
+
+  try {
+    writeJson(SERVICE_CONFIG_FILE, next);
+    serviceConfig = sanitizeServiceConfig(next);
+
+    if (!serviceConfig.auth.enabled) {
+      authSessions.clear();
+      clearAuthCookie(res);
+    } else if (passwordChanged || !getRequestAuthState(req).authenticated) {
+      authSessions.clear();
+      const session = createAuthSession();
+      setAuthCookie(res, session.token, session.expiresAt);
+    }
+
+    res.json({
+      ok: true,
+      serviceSettings: presentServiceSettings(),
+      authStatus: {
+        enabled: isLightAuthEnabled(),
+        authenticated: !serviceConfig.auth.enabled || getRequestAuthState(req).authenticated || passwordChanged
+      },
+      restartRequired: resolveHostForAccessMode(serviceConfig.networkAccess) !== HOST,
+      message: resolveHostForAccessMode(serviceConfig.networkAccess) !== HOST
+        ? '访问方式已保存，重启服务后生效。'
+        : '访问设置已保存。'
+    });
+  } catch (error) {
+    res.status(500).json({ error: formatError(error) });
+  }
+});
+
+app.post('/api/openclaw-webchat/settings/restart', async (_req, res) => {
+  const restartInfo = getRestartCapability();
+  if (!restartInfo.supported) {
+    return res.status(400).json({
+      error: restartInfo.message || '当前环境不支持自动重启。',
+      restartSupported: false,
+      restartHint: restartInfo.hint || null
+    });
+  }
+
+  res.status(202).json({
+    ok: true,
+    restarting: true,
+    message: '服务正在重启，前端会自动等待恢复。',
+    restartHint: restartInfo.hint || null
+  });
+
+  setTimeout(() => {
+    execFile('launchctl', ['kickstart', '-k', restartInfo.target], {
+      cwd: process.cwd()
+    }, () => {
+      // The current process is expected to terminate during restart; ignore callback errors.
+    });
+  }, 150);
 });
 
 app.post('/api/openclaw-webchat/uploads', async (req, res) => {
@@ -327,7 +494,7 @@ app.post('/api/openclaw-webchat/uploads', async (req, res) => {
       ok: true,
       upload: {
         kind,
-        source: stored.filePath,
+        source: stored.source,
         name: stored.displayName,
         size: buffer.byteLength,
         mimeType,
@@ -356,8 +523,8 @@ app.get('*', (_req, res) => {
   res.sendFile(path.resolve(__dirname, '../public/index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`[openclaw-webchat] listening on http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`[openclaw-webchat] listening on http://${HOST}:${PORT}`);
 });
 
 async function runUserTurn(binding, { text, inputBlocks }) {
@@ -1223,7 +1390,7 @@ function persistUpload({ kind, filename, mimeType, buffer }) {
   const stamped = `${Date.now()}-${cryptoId()}-${displayName}`;
   const filePath = path.join(UPLOADS_DIR, stamped);
   fs.writeFileSync(filePath, buffer);
-  return { filePath, displayName };
+  return { filePath, displayName, source: `${UPLOAD_SOURCE_PREFIX}${encodeURIComponent(stamped)}` };
 }
 
 function appendHistory(agentId, sessionKey, message) {
@@ -1780,7 +1947,7 @@ function verifyMediaToken(token) {
 
 function isAllowedMediaPath(filePath) {
   const normalized = resolveExistingPath(filePath);
-  return getAllowedMediaRoots().some((root) => isPathWithinRoot(normalized, root));
+  return Boolean(normalized);
 }
 
 function normalizeAvatarValue(value) {
@@ -1789,6 +1956,8 @@ function normalizeAvatarValue(value) {
 
   const mediaPath = decodeAvatarMediaPath(normalized);
   if (mediaPath) return mediaPath;
+  const localPath = resolveLocalMediaPath(normalized);
+  if (localPath) return sourceFromLocalPath(localPath);
   return normalized;
 }
 
@@ -1826,7 +1995,7 @@ function decodeAvatarMediaPath(value) {
     );
     if (!payload?.path) return null;
     const resolved = path.resolve(payload.path);
-    return isAllowedMediaPath(resolved) ? resolved : null;
+    return isAllowedMediaPath(resolved) ? sourceFromLocalPath(resolved) : null;
   } catch {
     return null;
   }
@@ -1855,14 +2024,6 @@ function resolveMediaSecret() {
   return generated;
 }
 
-function getAllowedMediaRoots() {
-  const roots = [
-    path.resolve(UPLOADS_DIR),
-    path.resolve(process.env.HOME || '', '.openclaw')
-  ];
-  return roots.filter(Boolean);
-}
-
 function isPathWithinRoot(targetPath, rootPath) {
   const relative = path.relative(rootPath, targetPath);
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
@@ -1881,6 +2042,8 @@ function resolveExistingPath(filePath) {
 function resolveLocalMediaPath(source) {
   const normalized = normalizeOptionalString(source);
   if (!normalized || normalized.startsWith('/api/')) return null;
+  const uploadPath = resolveManagedUploadPath(normalized);
+  if (uploadPath) return uploadPath;
   if (normalized.startsWith('~/')) {
     return path.resolve(process.env.HOME || '', normalized.slice(2));
   }
@@ -1888,6 +2051,238 @@ function resolveLocalMediaPath(source) {
     return path.resolve(normalized);
   }
   return null;
+}
+
+function resolveManagedUploadPath(source) {
+  if (!String(source || '').startsWith(UPLOAD_SOURCE_PREFIX)) return null;
+
+  try {
+    const encoded = String(source).slice(UPLOAD_SOURCE_PREFIX.length);
+    const decoded = decodeURIComponent(encoded);
+    if (!decoded) return null;
+    if (decoded !== path.basename(decoded)) return null;
+    if (!/^[a-zA-Z0-9._-]+$/.test(decoded)) return null;
+    return path.join(UPLOADS_DIR, decoded);
+  } catch {
+    return null;
+  }
+}
+
+function sourceFromLocalPath(filePath) {
+  const resolved = resolveExistingPath(filePath);
+  const uploadsRoot = path.resolve(UPLOADS_DIR);
+  if (isPathWithinRoot(resolved, uploadsRoot)) {
+    const filename = path.basename(resolved);
+    if (/^[a-zA-Z0-9._-]+$/.test(filename)) {
+      return `${UPLOAD_SOURCE_PREFIX}${encodeURIComponent(filename)}`;
+    }
+  }
+  return resolved;
+}
+
+function parseConfiguredPathList(value) {
+  const normalized = normalizeOptionalString(value);
+  if (!normalized) return [];
+
+  try {
+    const parsed = JSON.parse(normalized);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map((item) => normalizeConfiguredPath(item))
+        .filter(Boolean);
+    }
+  } catch {
+    // fall through to plain-text parsing
+  }
+
+  return normalized
+    .split(/[\n,]+|(?<!^[A-Za-z]):(?![\\/])/)
+    .map((item) => normalizeConfiguredPath(item))
+    .filter(Boolean);
+}
+
+function defaultServiceConfig() {
+  return {
+    networkAccess: 'local',
+    auth: {
+      enabled: false,
+      passwordSalt: null,
+      passwordHash: null
+    },
+    updatedAt: null
+  };
+}
+
+function sanitizeServiceConfig(value) {
+  const config = value && typeof value === 'object' ? value : {};
+  const auth = config.auth && typeof config.auth === 'object' ? config.auth : {};
+  return {
+    networkAccess: normalizeNetworkAccessMode(config.networkAccess) || 'local',
+    auth: {
+      enabled: auth.enabled === true,
+      passwordSalt: normalizeOptionalString(auth.passwordSalt),
+      passwordHash: normalizeOptionalString(auth.passwordHash)
+    },
+    updatedAt: normalizeOptionalString(config.updatedAt)
+  };
+}
+
+function normalizeNetworkAccessMode(value) {
+  return value === 'lan' ? 'lan' : value === 'local' ? 'local' : null;
+}
+
+function resolveHostForAccessMode(mode) {
+  return mode === 'lan' ? '0.0.0.0' : '127.0.0.1';
+}
+
+function presentServiceSettings() {
+  const restartCapability = getRestartCapability();
+  const hostManagedBy = normalizeOptionalString(process.env.OPENCLAW_WEBCHAT_HOST) ? 'env' : 'config';
+  return {
+    networkAccess: serviceConfig.networkAccess,
+    effectiveHost: HOST,
+    nextHost: resolveHostForAccessMode(serviceConfig.networkAccess),
+    hostManagedBy,
+    authEnabled: isLightAuthEnabled(),
+    authConfigured: Boolean(serviceConfig.auth.passwordHash && serviceConfig.auth.passwordSalt),
+    documentAccessMode: 'follow-openclaw',
+    restartRequired: resolveHostForAccessMode(serviceConfig.networkAccess) !== HOST,
+    restartSupported: restartCapability.supported,
+    restartHint: restartCapability.hint || null,
+    manualStart: {
+      projectDirectoryHint: '先进入 openclaw-webchat 项目目录',
+      installCommand: 'npm install',
+      startCommand: 'npm start',
+      restartCommand: restartCapability.hint || null
+    }
+  };
+}
+
+function presentProjectInfo() {
+  return {
+    name: 'openclaw-webchat',
+    summary: '一个面向个人使用的 OpenClaw WebChat，强调本地优先、长历史、媒体上传和更顺手的 agent 交流体验。',
+    githubUrl: PROJECT_GITHUB_URL
+  };
+}
+
+function getRestartCapability() {
+  if (process.platform !== 'darwin') {
+    return {
+      supported: false,
+      message: '自动重启目前只支持 macOS launchd 方式。',
+      hint: '请在命令行里重新启动 openclaw-webchat 服务。'
+    };
+  }
+
+  const uid = process.getuid?.();
+  if (!Number.isInteger(uid)) {
+    return {
+      supported: false,
+      message: '无法确定当前用户，不能自动重启服务。',
+      hint: '请手动重启当前 openclaw-webchat 进程。'
+    };
+  }
+
+  return {
+    supported: true,
+    target: `gui/${uid}/${RESTART_LABEL}`,
+    hint: `launchctl kickstart -k gui/${uid}/${RESTART_LABEL}`
+  };
+}
+
+function isLightAuthEnabled() {
+  return serviceConfig.auth.enabled === true
+    && Boolean(serviceConfig.auth.passwordHash)
+    && Boolean(serviceConfig.auth.passwordSalt);
+}
+
+function hashLightAuthPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(String(password), salt, 64).toString('hex');
+  return { salt, hash };
+}
+
+function verifyLightAuthPassword(password) {
+  if (!isLightAuthEnabled()) return true;
+
+  const expected = serviceConfig.auth.passwordHash;
+  const actual = crypto.scryptSync(String(password), serviceConfig.auth.passwordSalt, 64).toString('hex');
+  const expectedBuffer = Buffer.from(expected, 'hex');
+  const actualBuffer = Buffer.from(actual, 'hex');
+  if (expectedBuffer.length !== actualBuffer.length) return false;
+  return crypto.timingSafeEqual(expectedBuffer, actualBuffer);
+}
+
+function createAuthSession() {
+  const token = crypto.randomBytes(24).toString('base64url');
+  const expiresAt = Date.now() + AUTH_SESSION_TTL_MS;
+  authSessions.set(token, { expiresAt });
+  return { token, expiresAt };
+}
+
+function setAuthCookie(res, token, expiresAt) {
+  const maxAge = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+  res.setHeader('Set-Cookie', `${AUTH_COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`);
+}
+
+function clearAuthCookie(res) {
+  res.setHeader('Set-Cookie', `${AUTH_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+}
+
+function parseCookies(req) {
+  const header = String(req.headers?.cookie || '');
+  if (!header) return {};
+
+  return header.split(';').reduce((acc, chunk) => {
+    const [rawKey, ...rest] = chunk.split('=');
+    const key = String(rawKey || '').trim();
+    if (!key) return acc;
+    acc[key] = decodeURIComponent(rest.join('=').trim());
+    return acc;
+  }, {});
+}
+
+function readAuthTokenFromRequest(req) {
+  const cookies = parseCookies(req);
+  return normalizeOptionalString(cookies[AUTH_COOKIE_NAME]);
+}
+
+function getRequestAuthState(req) {
+  if (!isLightAuthEnabled()) {
+    return { authenticated: true, expiresAt: null };
+  }
+
+  const token = readAuthTokenFromRequest(req);
+  if (!token) return { authenticated: false, expiresAt: null };
+
+  const session = authSessions.get(token);
+  if (!session) return { authenticated: false, expiresAt: null };
+  if (!session.expiresAt || Date.now() > session.expiresAt) {
+    authSessions.delete(token);
+    return { authenticated: false, expiresAt: null };
+  }
+
+  return { authenticated: true, expiresAt: new Date(session.expiresAt).toISOString(), token };
+}
+
+function isPublicRequest(req) {
+  if (req.path === '/healthz') return true;
+  if (req.path.startsWith('/static/')) return true;
+  if (req.path === '/api/openclaw-webchat/auth/status') return true;
+  if (req.path === '/api/openclaw-webchat/auth/login') return true;
+  if (req.path === '/api/openclaw-webchat/auth/logout') return true;
+  if (req.method === 'GET' && !req.path.startsWith('/api/openclaw-webchat/')) return true;
+  return false;
+}
+
+function normalizeConfiguredPath(value) {
+  const normalized = normalizeOptionalString(value);
+  if (!normalized) return null;
+  if (normalized.startsWith('~/')) {
+    return path.resolve(process.env.HOME || '', normalized.slice(2));
+  }
+  return path.resolve(normalized);
 }
 
 function normalizeSafeRemoteMediaUrl(source) {

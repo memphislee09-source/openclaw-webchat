@@ -1549,6 +1549,21 @@ button {
   opacity: 0.82;
 }
 
+.settings-link-list {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-link-list a {
+  color: var(--brand);
+  text-decoration: none;
+  word-break: break-word;
+}
+
+.settings-link-list a:hover {
+  text-decoration: underline;
+}
+
 .theme-preset-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1772,6 +1787,24 @@ button {
   color: var(--text-soft);
 }
 
+.settings-checkbox-field {
+  gap: 0;
+}
+
+.settings-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.settings-checkbox-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--brand);
+}
+
 .settings-field input {
   width: 100%;
   min-height: 46px;
@@ -1799,6 +1832,91 @@ button {
 
 .settings-actions {
   justify-content: flex-end;
+}
+
+.settings-startup-list {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-startup-item {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-startup-label {
+  font-size: 13px;
+  color: var(--text-soft);
+}
+
+.settings-startup-item code {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface-1);
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.auth-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 12;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(7, 10, 20, 0.58);
+  backdrop-filter: blur(10px);
+}
+
+.service-restart-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 13;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(7, 10, 20, 0.62);
+  backdrop-filter: blur(12px);
+}
+
+.auth-gate-card {
+  width: min(480px, 100%);
+  border-radius: 28px;
+  border: 1px solid var(--line);
+  background: var(--settings-panel-bg);
+  box-shadow: var(--shadow);
+  padding: 24px;
+  display: grid;
+  gap: 14px;
+}
+
+.auth-gate-card h2 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.auth-gate-form {
+  display: grid;
+  gap: 14px;
+}
+
+.app-shell.auth-locked .sidebar,
+.app-shell.auth-locked .chat-layout,
+.app-shell.auth-locked .settings-panel,
+.app-shell.service-restarting .sidebar,
+.app-shell.service-restarting .chat-layout,
+.app-shell.service-restarting .settings-panel,
+.app-shell.auth-locked .media-viewer {
+  pointer-events: none;
+  user-select: none;
+  filter: blur(2px);
 }
 
 .mobile-only {

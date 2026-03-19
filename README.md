@@ -1,91 +1,155 @@
 # openclaw-webchat
 
-OpenClaw WebChat 项目仓库。
+A standalone WebChat for OpenClaw with long-lived per-agent history, local media handling, and a lightweight server adapter.
 
-## 当前版本
-- 发布版本：`0.1.3`
-- 包版本：`0.1.3`
+`openclaw-webchat` 是一个独立于 OpenClaw 默认 WebUI 的 WebChat 项目，目标是在不深度耦合官方前端实现的前提下，提供更稳定的历史保留、富媒体体验和多会话隔离能力。
 
-## 项目目标
-构建可扩展、可维护的 WebChat 客户端，为 OpenClaw 提供稳定的对话交互体验。
+## Status
+- Current version: `0.1.3`
+- Stability: `alpha`
+- Default branch: `main`
+- Recommended deployment: local machine or private network behind Tailscale / equivalent access control
+- Current priorities:
+  - verify mobile history loading stability and fix the root cause if needed
+  - continue visual media bubble regression checks
+  - run broader multi-agent / late-reply regression
+  - validate the successful audio transcription path
+  - ship history search phase 2
 
-## 当前阶段
-- 阶段：`0.1.3` 已合入 `main`，在 `0.1.2` 安全/稳定性修复基础上补齐历史搜索第一版及其交互收口，作为后续开发基点继续演进
-- 当前重点：移动端历史加载稳定性、视觉媒体气泡方案收口、多 agent / 迟到回包回归、音频转写成功链路验收、历史搜索第二阶段增强
+## What This Project Does
+- Keeps a long-lived timeline for each OpenClaw agent inside the `openclaw-webchat` namespace
+- Stores displayable history locally in JSONL instead of depending on upstream internal logs for rendering
+- Supports assistant rich media rendering for images, audio, video, and files
+- Supports user image upload and audio upload with optional local Whisper transcription
+- Preserves local history across `/new` while resetting only the upstream context
+- Provides a dedicated web UI with agent list, search, settings, avatars, and responsive layout
+- Adds local slash command handling for common session and model operations
 
-## 本地运行
+## Scope And Non-Goals
+`openclaw-webchat` is intentionally scoped as a focused companion UI for OpenClaw.
+
+Current non-goals:
+- sync history with the default OpenClaw WebUI
+- sync history with Slack, Discord, or other external channels
+- expose a public-internet, multi-tenant hosted SaaS deployment
+- add a built-in authentication system for the MVP
+- publish this repo as an npm package
+
+## Quick Start
+
+### Prerequisites
+- Node.js `20+`
+- A working `openclaw` CLI available on `PATH`
+- A local OpenClaw environment that can answer CLI requests
+
+### Run Locally
 ```bash
 npm install
 npm start
-# 默认监听 http://localhost:3770
 ```
 
-## 常驻运行
-已提供 launchd 启动脚本：
+The service listens on `http://127.0.0.1:3770` by default.
+
+### Runtime Configuration
+
+Useful environment variables:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `OPENCLAW_WEBCHAT_PORT` | `3770` | HTTP port |
+| `OPENCLAW_WEBCHAT_HOST` | `127.0.0.1` | Bind address. Set `0.0.0.0` for LAN access if you understand the trust boundary. |
+| `OPENCLAW_BIN` | `openclaw` | Path to the OpenClaw CLI |
+| `OPENCLAW_WEBCHAT_DATA_DIR` | `./data` | Runtime data directory |
+| `OPENCLAW_WEBCHAT_MEDIA_SECRET` | auto-generated | Media token signing secret |
+| `OPENCLAW_WEBCHAT_LAUNCHD_LABEL` | `ai.openclaw.webchat` | launchd label used by the in-app restart action on macOS |
+| `OPENCLAW_WEBCHAT_GITHUB_URL` | project repo URL | GitHub link shown in the settings "About" panel |
+
+### Access Modes
+- Local browser on the same machine: works out of the box with the default loopback bind
+- LAN browser access: supported by switching the access mode to LAN in the settings UI and then restarting the service
+- Tailscale access: supported when your Tailnet can already reach this machine; the app itself does not require a separate Tailscale integration layer
+
+The settings UI now includes:
+- an Appearance section for theme presets
+- access mode switching between local-only and LAN / Tailscale-friendly binding
+- optional light authentication for shared LAN-style access
+- an About section with project summary and GitHub link
+- a Manual Start section with install, start, and restart command hints
+- a reminder when a service restart is required for access-mode changes
+- an in-app restart action for launchd-managed macOS setups, plus a manual restart command hint
+- a note that document access scope follows the current OpenClaw configuration instead of a separate WebChat-only restriction
+
+Basic health check:
+
+```bash
+curl http://127.0.0.1:3770/healthz
+```
+
+For a macOS background service workflow, this repo includes an example launch script:
 
 ```bash
 scripts/run-webchat-launchd.sh
 ```
 
-推荐以用户级 LaunchAgent `ai.openclaw.webchat` 常驻运行，日志写入：
-- `~/.openclaw/logs/webchat.log`
-- `~/.openclaw/logs/webchat.err.log`
+This script is a project-local example, not a universal installer.
 
-说明：
-- WebChat 自身会常驻监听 `3770` 端口；
-- 它在每次请求时调用 `openclaw` CLI，因此即使 OpenClaw / gateway 重启，WebChat 进程保持常驻即可继续服务；
-- launchd `KeepAlive` 会在 WebChat 异常退出后自动拉起。
+## Security And Deployment Notes
+- This project is designed first for local or private-network use.
+- It does not ship with a built-in auth layer for public internet exposure.
+- Document access scope follows the current OpenClaw configuration.
+- Local media rendering follows OpenClaw/runtime output plus the current instance auth boundary rather than a separate WebChat-only document/media restriction.
+- LAN access is supported, but it is an explicit operator choice. Prefer the default loopback bind unless you intentionally need access from other devices.
+- If you use LAN mode, you can optionally enable a lightweight shared password from the settings panel.
+- Listener rebinding is not hot-swapped inside the current Node process, so switching between local-only and LAN bind modes still requires a service restart.
+- Before exposing it beyond your own machine or private mesh, read [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) and [SECURITY.md](SECURITY.md).
 
-## 自测
+## Repository Guide
+
+### Public Docs
+- [README.md](README.md): project overview and quick start
+- [CHANGELOG.md](CHANGELOG.md): release-oriented change log
+- [CONTRIBUTING.md](CONTRIBUTING.md): contribution workflow and local checks
+- [SECURITY.md](SECURITY.md): vulnerability reporting and supported versions
+- [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md): deployment assumptions and security boundaries
+
+### Engineering Docs
+- [status.md](status.md): current project status and read order for ongoing development
+- [docs/PROJECT_CHARTER.md](docs/PROJECT_CHARTER.md): scope, goals, and boundaries
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): architecture draft
+- [docs/ROADMAP.md](docs/ROADMAP.md): milestones and release direction
+- [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md): product requirements
+- [docs/error.md](docs/error.md): incident and fix log
+- [docs/HANDOFF-2026-03-18.md](docs/HANDOFF-2026-03-18.md): latest mainline handoff
+
+## Development Checks
+```bash
+npm run check
+```
+
+Optional local integration smoke test:
+
 ```bash
 npm run selftest
 ```
 
-## 当前已完成能力
-- 独立命名空间与 API：`/api/openclaw-webchat/*`
-- `agentId -> session` 绑定
-- 自有 JSONL 历史存储
-- `/new` 上游重置 + 本地 marker 保留
-- 隐藏 bootstrap 注入
-- assistant 最终回复提取
-- 结构化媒体块 + `MEDIA:` / `mediaUrl:` fallback 解析
-- 本地媒体代理与“文件丢失”兜底
-- 左侧 agent 列表 + 主聊天区 + 输入区
-- 历史渲染与无限上拉分页
-- 移动端抽屉布局
-- 底部起消息流（最新消息贴近输入框）
-- 对话气泡头像（agent / 用户）
-- 新消息自动贴底显示，无需手动滚动
-- 左栏和右栏独立滚动
-- 我的显示名 / 我的头像 URL 快速设置
-- 用户图片上传、发送前预览与本地落盘
-- 用户音频上传、默认本地 Whisper 自动转写、失败时仍发送原音频
-- `+` 按钮统一上传图片/音频
-- 图片直接嵌入气泡，支持单击全屏、缩放与平移
-- 视频直接嵌入气泡，使用原生播放器控件处理全屏
-- 对话气泡支持常用 Markdown 渲染（标题、列表、引用、代码块、链接、粗斜体）
-- 当前版本支持图片 / 视频图文气泡等宽显示：气泡宽度跟随媒体实际显示宽度，桌面端最大 `70vw`
-- 已收紧视觉媒体气泡启用条件：纯媒体或短图注消息使用等宽气泡，长正文图文混排在桌面端回退为常规宽气泡
-- 对话气泡阴影已进一步收紧，浅色主题下只保留很轻的层次，不再呈现明显漂浮感
-- 发送后立即清空输入框；agent 处理期间显示头像 + 动态处理中指示
-- 左右聊天头像尺寸统一
-- 可视化设置页支持统一联系人管理、头像本地裁剪上传与可收起的展开式设置分区
-- 设置页偏好分区已支持 1 套深色 + 5 套浅色主题预设切换，并在浏览器本地持久化主题选择；当前默认浅色方案为 `Dawn Peach`
-- agent / 用户头像持久化改为保存稳定源路径，前端展示时动态签发媒体地址，避免头像过一段时间后失效
-- gateway 断连重试与长耗时回复等待增强
-- 当前 agent 主时间线支持按关键词搜索历史消息，并提供顶部常驻搜索框、最近搜索回选、结果跳转与命中消息关键词高亮
+`selftest` assumes you already have a usable local OpenClaw environment. CI does not rely on that external dependency.
 
-## 仓库结构
-- `status.md`：项目状态与里程碑（开工前先读）
-- `docs/PROJECT_CHARTER.md`：项目章程（范围/目标/边界）
-- `docs/ARCHITECTURE.md`：架构草案
-- `docs/ROADMAP.md`：里程碑与迭代节奏
-- `docs/HANDOFF-2026-03-18.md`：最新 `0.1.3` 主线基线摘要与下一步建议
-- `docs/HANDOFF-2026-03-17.md`：上一轮交接摘要
-- `docs/HANDOFF-2026-03-15.md`：上一轮交接记录
-- `docs/error.md`：错误与修复记录
+## Current Highlights
+- Dedicated API namespace: `/api/openclaw-webchat/*`
+- Stable `agentId -> session` binding
+- Local JSONL history with visible-only messages
+- Rich media parsing with structured blocks plus `MEDIA:` / `mediaUrl:` fallbacks
+- Search within the current agent timeline with jump-to-hit and keyword highlight
+- Responsive layout for desktop, tablet, and mobile drawer navigation
+- User and agent avatar/profile customization
+- Theme presets and lighter chat-bubble visual treatment
+- Retry and timeout handling for gateway and long-running assistant responses
 
-## 协作约定
-1. 所有变更先更新相关文档，再提交代码。
-2. 每次提交保持可回滚、可追踪。
-3. 本地与 GitHub 保持同步（提交后立即 push）。
+## Contribution And Release Expectations
+- Update relevant docs before or alongside code changes.
+- Keep changes small, reviewable, and easy to roll back.
+- Run the documented checks before opening a pull request.
+- Treat `main` as the release baseline. Experimental branches should stay isolated until explicitly approved for merge.
+
+## License
+Released under the terms of the [LICENSE](LICENSE) file.

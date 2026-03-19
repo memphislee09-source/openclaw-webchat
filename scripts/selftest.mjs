@@ -19,6 +19,7 @@ const profilesFile = process.env.OPENCLAW_WEBCHAT_DATA_DIR
 const unique = `selftest-${Date.now()}`;
 
 await checkHealth();
+await checkAuthStatus();
 await checkCommandsCatalog();
 await checkPageShell();
 await checkMixedMediaParsing();
@@ -39,6 +40,12 @@ console.log('SELFTEST_OK');
 async function checkHealth() {
   const health = await getJson('/healthz');
   assert(health?.ok === true, 'healthz should return ok=true');
+}
+
+async function checkAuthStatus() {
+  const payload = await getJson('/api/openclaw-webchat/auth/status');
+  assert(typeof payload?.enabled === 'boolean', 'auth status should expose enabled flag');
+  assert(typeof payload?.authenticated === 'boolean', 'auth status should expose authenticated flag');
 }
 
 async function checkPageShell() {
@@ -162,6 +169,8 @@ async function checkMixedMediaParsing() {
 async function checkSettings() {
   const settings = await getJson('/api/openclaw-webchat/settings');
   assert(settings?.userProfile, 'settings should return userProfile');
+  assert(settings?.serviceSettings, 'settings should return serviceSettings');
+  assert(typeof settings?.authStatus?.enabled === 'boolean', 'settings should return auth status');
   assert(typeof settings.userProfile.displayName === 'string', 'settings should include displayName');
 
   const patched = await patchJson('/api/openclaw-webchat/settings/user-profile', {
@@ -192,6 +201,7 @@ async function checkUpload() {
   });
   assert(payload?.ok === true, 'upload should return ok=true');
   assert(payload?.upload?.source, 'upload should return stored source');
+  assert(payload.upload.source.startsWith('openclaw-upload:'), 'upload should return opaque upload source instead of absolute path');
   assert(payload?.block?.type === 'image', 'upload should return image block');
   const mediaResponse = await fetch(`${base}${payload.block.url}`);
   assert(mediaResponse.ok, 'uploaded media url should be readable');
@@ -207,6 +217,7 @@ async function checkAudioUpload() {
   });
   assert(payload?.ok === true, 'audio upload should return ok=true');
   assert(payload?.upload?.source, 'audio upload should return stored source');
+  assert(payload.upload.source.startsWith('openclaw-upload:'), 'audio upload should return opaque upload source instead of absolute path');
   assert(payload?.block?.type === 'audio', 'audio upload should return audio block');
   assert((payload?.upload?.transcriptStatus ?? null) === null, 'audio upload selftest should skip transcription');
   const mediaResponse = await fetch(`${base}${payload.block.url}`);
@@ -227,6 +238,7 @@ async function checkAgentProfile() {
     contentBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2W2i8AAAAASUVORK5CYII='
   });
   assert(upload?.upload?.source, 'agent avatar upload should return persistent source');
+  assert(upload.upload.source.startsWith('openclaw-upload:'), 'agent avatar upload should return opaque source instead of absolute path');
   assert(upload?.block?.url?.includes('/api/openclaw-webchat/media?token='), 'agent avatar upload should return a signed media url');
 
   const patched = await patchJson(`/api/openclaw-webchat/agents/${encodeURIComponent(agentId)}/profile`, {

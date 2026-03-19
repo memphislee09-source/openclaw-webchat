@@ -2,13 +2,47 @@
 
 set -euo pipefail
 
-export HOME="/Users/memphis"
-export PATH="/Users/memphis/.local/bin:/Users/memphis/.npm-global/bin:/Users/memphis/bin:/Users/memphis/.volta/bin:/Users/memphis/.asdf/shims:/Users/memphis/.bun/bin:/Users/memphis/Library/Application Support/fnm/aliases/default/bin:/Users/memphis/.fnm/aliases/default/bin:/Users/memphis/Library/pnpm:/Users/memphis/.local/share/pnpm:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-export NODE_USE_SYSTEM_CA="1"
-export NODE_EXTRA_CA_CERTS="/etc/ssl/cert.pem"
-export OPENCLAW_BIN="/opt/homebrew/bin/openclaw"
+SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
+PROJECT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
-mkdir -p "$HOME/.openclaw/logs"
-cd /Users/memphis/.openclaw/workspace-mira/openclaw-webchat
+export HOME="${HOME:-$(cd ~ && pwd)}"
+export PATH="${PATH:-/usr/bin:/bin}"
 
-exec /opt/homebrew/bin/node /Users/memphis/.openclaw/workspace-mira/openclaw-webchat/src/server.js
+for EXTRA_PATH in \
+  "$HOME/.local/bin" \
+  "$HOME/.npm-global/bin" \
+  "$HOME/bin" \
+  "$HOME/.volta/bin" \
+  "$HOME/.asdf/shims" \
+  "$HOME/.bun/bin" \
+  "$HOME/Library/Application Support/fnm/aliases/default/bin" \
+  "$HOME/.fnm/aliases/default/bin" \
+  "$HOME/Library/pnpm" \
+  "$HOME/.local/share/pnpm" \
+  "/opt/homebrew/bin" \
+  "/usr/local/bin"
+do
+  if [[ -d "$EXTRA_PATH" ]]; then
+    export PATH="$EXTRA_PATH:$PATH"
+  fi
+done
+
+export NODE_USE_SYSTEM_CA="${NODE_USE_SYSTEM_CA:-1}"
+if [[ -f /etc/ssl/cert.pem ]]; then
+  export NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-/etc/ssl/cert.pem}"
+fi
+
+if [[ -z "${OPENCLAW_BIN:-}" ]] && command -v openclaw >/dev/null 2>&1; then
+  export OPENCLAW_BIN="$(command -v openclaw)"
+fi
+
+NODE_BIN="${NODE_BIN:-$(command -v node || true)}"
+if [[ -z "$NODE_BIN" ]]; then
+  echo "openclaw-webchat: node was not found on PATH" >&2
+  exit 1
+fi
+
+mkdir -p "${OPENCLAW_WEBCHAT_LOG_DIR:-$HOME/.openclaw/logs}"
+cd "$PROJECT_DIR"
+
+exec "$NODE_BIN" "$PROJECT_DIR/src/server.js"
