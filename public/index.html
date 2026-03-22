@@ -89,6 +89,24 @@
               </form>
               <section class="history-search-panel hidden" id="historySearchPanel" aria-label="历史搜索">
                 <div class="history-search-meta" id="historySearchMeta">输入关键词后即可搜索当前 agent 的主时间线。</div>
+                <div class="history-search-filters" id="historySearchFilters">
+                  <label class="history-search-filter">
+                    <span id="historySearchFromLabel">起始日期</span>
+                    <input id="historySearchFromInput" type="date" />
+                  </label>
+                  <label class="history-search-filter">
+                    <span id="historySearchToLabel">结束日期</span>
+                    <input id="historySearchToInput" type="date" />
+                  </label>
+                  <label class="history-search-filter history-search-filter-limit">
+                    <span id="historySearchLimitLabel">结果数</span>
+                    <select id="historySearchLimitSelect">
+                      <option value="20">20</option>
+                      <option value="50" selected>50</option>
+                      <option value="100">100</option>
+                    </select>
+                  </label>
+                </div>
                 <div class="history-search-results" id="historySearchResults"></div>
               </section>
             </div>

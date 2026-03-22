@@ -14,7 +14,7 @@ A standalone WebChat for OpenClaw with long-lived per-agent history, local media
   - continue visual media bubble regression checks
   - run broader multi-agent / late-reply regression
   - validate the successful audio transcription path
-  - ship history search phase 2
+  - continue refining history search after the first phase-2 slice shipped
 
 ## What This Project Does
 - Keeps a long-lived timeline for each OpenClaw agent inside the `openclaw-webchat` namespace
@@ -24,6 +24,7 @@ A standalone WebChat for OpenClaw with long-lived per-agent history, local media
 - Preserves local history across `/new` while resetting only the upstream context
 - Provides a dedicated web UI with agent list, search, settings, avatars, and responsive layout
 - Adds local slash command handling for common session and model operations
+- Adds date-filtered history search with stronger matching and larger result windows
 
 ## Scope And Non-Goals
 `openclaw-webchat` is intentionally scoped as a focused companion UI for OpenClaw.
@@ -120,7 +121,7 @@ This script is a project-local example, not a universal installer.
 - [docs/ROADMAP.md](docs/ROADMAP.md): milestones and release direction
 - [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md): product requirements
 - [docs/error.md](docs/error.md): incident and fix log
-- [docs/HANDOFF-2026-03-19.md](docs/HANDOFF-2026-03-19.md): latest mainline handoff
+- [docs/HANDOFF-2026-03-22.md](docs/HANDOFF-2026-03-22.md): latest mainline handoff
 
 ## Development Checks
 ```bash
@@ -141,6 +142,7 @@ npm run selftest
 - Local JSONL history with visible-only messages
 - Rich media parsing with structured blocks plus `MEDIA:` / `mediaUrl:` fallbacks
 - Search within the current agent timeline with jump-to-hit and keyword highlight
+- History search phase 2 first slice with date filters, larger result sets, and stronger matching
 - Responsive layout for desktop, tablet, and mobile drawer navigation
 - User and agent avatar/profile customization
 - Theme presets and lighter chat-bubble visual treatment

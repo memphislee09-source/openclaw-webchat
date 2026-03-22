@@ -5,6 +5,7 @@ const LEGACY_THEME_MODE_STORAGE_KEY = 'openclaw-webchat-theme-mode';
 const LANGUAGE_STORAGE_KEY = 'openclaw-webchat-language';
 const HISTORY_SEARCH_RECENTS_STORAGE_KEY = 'openclaw-webchat-history-search-recents';
 const HISTORY_SEARCH_MAX_RECENTS = 8;
+const DEFAULT_HISTORY_SEARCH_LIMIT = 50;
 const SETTINGS_SECTIONS = ['contacts', 'preferences', 'access', 'about', 'manual-start'];
 const SUPPORTED_LANGUAGES = ['zh-CN', 'en'];
 const THEME_PRESETS = {
@@ -57,6 +58,9 @@ const I18N = {
       searchHistory: '搜索当前会话历史',
       search: '搜索',
       historySearch: '历史搜索',
+      searchDateFrom: '起始日期',
+      searchDateTo: '结束日期',
+      searchResultLimit: '结果数',
       composerPlaceholder: '输入消息，Enter 换行；点 / 按钮或直接输入 slash 命令可执行本地命令',
       attachMedia: '上传图片或音频',
       openSlashMenu: '打开 slash 命令菜单',
@@ -135,10 +139,12 @@ const I18N = {
       restoredSession: '会话已恢复。',
       searchNeedAgent: '请先打开一个 agent 会话，再搜索该时间线中的历史消息。',
       searchingHistory: '正在搜索当前 agent 的历史消息…',
-      searchPrompt: '输入关键词后即可搜索当前 agent 的主时间线。',
+      searchPrompt: '输入关键词后即可搜索当前 agent 的主时间线，也可叠加日期筛选。',
       searchResultsSummary: '已找到 {total} 条命中结果{overflow}',
       searchResultsOverflow: '，当前显示前 {shown} 条。',
       searchResultsEnd: '。',
+      searchFiltersActive: '当前筛选：{filters}',
+      searchDateRangeInvalid: '起始日期不能晚于结束日期。',
       noSearchResults: '没有找到匹配的历史消息。',
       searchHitMessage: '命中消息',
       systemMarker: '系统标记',
@@ -258,6 +264,9 @@ const I18N = {
       searchHistory: 'Search this conversation history',
       search: 'Search',
       historySearch: 'History Search',
+      searchDateFrom: 'From',
+      searchDateTo: 'To',
+      searchResultLimit: 'Limit',
       composerPlaceholder: 'Type a message. Enter inserts a newline. Use the / button or type a slash command to run local commands.',
       attachMedia: 'Upload image or audio',
       openSlashMenu: 'Open slash command menu',
@@ -336,10 +345,12 @@ const I18N = {
       restoredSession: 'Session restored.',
       searchNeedAgent: 'Open an agent session first, then search within that timeline.',
       searchingHistory: 'Searching the current agent history…',
-      searchPrompt: 'Enter keywords to search the current agent main timeline.',
+      searchPrompt: 'Enter keywords to search the current agent main timeline, with optional date filters.',
       searchResultsSummary: 'Found {total} matches{overflow}',
       searchResultsOverflow: ', showing the first {shown}.',
       searchResultsEnd: '.',
+      searchFiltersActive: 'Filters: {filters}',
+      searchDateRangeInvalid: 'The start date must not be later than the end date.',
       noSearchResults: 'No matching history messages found.',
       searchHitMessage: 'Matched message',
       systemMarker: 'System Marker',
@@ -472,6 +483,9 @@ const state = {
   historySearchTotal: 0,
   historySearchLoading: false,
   historySearchError: '',
+  historySearchFromDate: '',
+  historySearchToDate: '',
+  historySearchLimit: DEFAULT_HISTORY_SEARCH_LIMIT,
   historySearchActiveMessageId: null,
   historySearchRequestId: 0,
   historySearchRecentQueries: [],
@@ -547,6 +561,12 @@ const historySearchPanelEl = document.getElementById('historySearchPanel');
 const historySearchFormEl = document.getElementById('historySearchForm');
 const historySearchInputEl = document.getElementById('historySearchInput');
 const historySearchSubmitButtonEl = document.getElementById('historySearchSubmitButton');
+const historySearchFromLabelEl = document.getElementById('historySearchFromLabel');
+const historySearchFromInputEl = document.getElementById('historySearchFromInput');
+const historySearchToLabelEl = document.getElementById('historySearchToLabel');
+const historySearchToInputEl = document.getElementById('historySearchToInput');
+const historySearchLimitLabelEl = document.getElementById('historySearchLimitLabel');
+const historySearchLimitSelectEl = document.getElementById('historySearchLimitSelect');
 const historySearchMetaEl = document.getElementById('historySearchMeta');
 const historySearchResultsEl = document.getElementById('historySearchResults');
 const composerFormEl = document.getElementById('composerForm');
@@ -649,6 +669,9 @@ function bindEvents() {
   historySearchFormEl?.addEventListener('submit', handleHistorySearchSubmit);
   historySearchInputEl?.addEventListener('focus', handleHistorySearchFocus);
   historySearchInputEl?.addEventListener('input', handleHistorySearchInput);
+  historySearchFromInputEl?.addEventListener('input', handleHistorySearchFiltersChange);
+  historySearchToInputEl?.addEventListener('input', handleHistorySearchFiltersChange);
+  historySearchLimitSelectEl?.addEventListener('change', handleHistorySearchFiltersChange);
   headerRefreshButtonEl.addEventListener('click', () => refreshAgents({ autoOpen: false, refreshCurrent: true }));
   refreshAgentsButtonEl?.addEventListener('click', () => refreshAgents({ autoOpen: false, refreshCurrent: true }));
   attachButtonEl.addEventListener('click', () => mediaUploadInputEl.click());
@@ -802,6 +825,9 @@ function renderLocalizedChrome() {
   if (!state.activeAgentId) chatSubtitleEl.textContent = t('ui.selectAgent');
   historySearchInputEl.placeholder = state.activeAgentId ? t('ui.searchHistory') : t('ui.searchHistory');
   historySearchSubmitButtonEl.textContent = searchLabel;
+  historySearchFromLabelEl.textContent = t('ui.searchDateFrom');
+  historySearchToLabelEl.textContent = t('ui.searchDateTo');
+  historySearchLimitLabelEl.textContent = t('ui.searchResultLimit');
   historySearchPanelEl?.setAttribute('aria-label', t('ui.historySearch'));
   composerInputEl.placeholder = t('ui.composerPlaceholder');
   attachButtonEl?.setAttribute('aria-label', t('ui.attachMedia'));
@@ -1403,11 +1429,19 @@ function resetHistorySearch({ keepOpen = false } = {}) {
   state.historySearchTotal = 0;
   state.historySearchLoading = false;
   state.historySearchError = '';
+  state.historySearchFromDate = '';
+  state.historySearchToDate = '';
   state.historySearchActiveMessageId = null;
   state.historySearchShowingRecents = false;
   state.historySearchOpen = keepOpen ? state.historySearchOpen : false;
   if (historySearchInputEl) {
     historySearchInputEl.value = '';
+  }
+  if (historySearchFromInputEl) {
+    historySearchFromInputEl.value = '';
+  }
+  if (historySearchToInputEl) {
+    historySearchToInputEl.value = '';
   }
   renderHistorySearchPanel();
 }
@@ -1421,11 +1455,23 @@ function renderHistorySearchPanel() {
   if (historySearchInputEl && historySearchInputEl.value !== state.historySearchQuery) {
     historySearchInputEl.value = state.historySearchQuery;
   }
+  if (historySearchFromInputEl && historySearchFromInputEl.value !== state.historySearchFromDate) {
+    historySearchFromInputEl.value = state.historySearchFromDate;
+  }
+  if (historySearchToInputEl && historySearchToInputEl.value !== state.historySearchToDate) {
+    historySearchToInputEl.value = state.historySearchToDate;
+  }
+  if (historySearchLimitSelectEl && String(historySearchLimitSelectEl.value) !== String(state.historySearchLimit)) {
+    historySearchLimitSelectEl.value = String(state.historySearchLimit);
+  }
 
   if (historySearchInputEl) {
     historySearchInputEl.disabled = !state.activeAgentId;
     historySearchInputEl.placeholder = t('ui.searchHistory');
   }
+  historySearchFromInputEl.disabled = !state.activeAgentId || state.historySearchLoading;
+  historySearchToInputEl.disabled = !state.activeAgentId || state.historySearchLoading;
+  historySearchLimitSelectEl.disabled = !state.activeAgentId || state.historySearchLoading;
 
   historySearchSubmitButtonEl.disabled = !state.activeAgentId || state.historySearchLoading;
 
@@ -1444,12 +1490,14 @@ function renderHistorySearchPanel() {
       ? ''
       : t('status.searchPrompt');
   } else {
-    historySearchMetaEl.textContent = t('status.searchResultsSummary', {
+    const summary = t('status.searchResultsSummary', {
       total: state.historySearchTotal,
       overflow: state.historySearchTotal > state.historySearchResults.length
         ? t('status.searchResultsOverflow', { shown: state.historySearchResults.length })
         : t('status.searchResultsEnd')
     });
+    const filters = describeHistorySearchFilters();
+    historySearchMetaEl.textContent = filters ? `${summary} ${t('status.searchFiltersActive', { filters })}` : summary;
   }
 
   historySearchResultsEl.innerHTML = '';
@@ -1555,6 +1603,34 @@ function handleHistorySearchFocus() {
   setHistorySearchOpen(true);
 }
 
+function handleHistorySearchFiltersChange() {
+  if (!state.activeAgentId) return;
+
+  state.historySearchFromDate = normalizeHistorySearchDateValue(historySearchFromInputEl?.value);
+  state.historySearchToDate = normalizeHistorySearchDateValue(historySearchToInputEl?.value);
+  state.historySearchLimit = readHistorySearchLimit(historySearchLimitSelectEl?.value);
+  state.historySearchShowingRecents = !String(state.historySearchQuery || '').trim();
+  setHistorySearchOpen(true);
+
+  if (!isHistorySearchDateRangeValid(state.historySearchFromDate, state.historySearchToDate)) {
+    state.historySearchRequestId += 1;
+    state.historySearchLoading = false;
+    state.historySearchResults = [];
+    state.historySearchTotal = 0;
+    state.historySearchError = t('status.searchDateRangeInvalid');
+    renderHistorySearchPanel();
+    return;
+  }
+
+  state.historySearchError = '';
+  if (!state.historySearchQuery) {
+    renderHistorySearchPanel();
+    return;
+  }
+
+  void executeHistorySearch(state.historySearchQuery);
+}
+
 function applyHistorySearchRecentQuery(query) {
   if (!historySearchInputEl) return;
   historySearchInputEl.value = query;
@@ -1600,8 +1676,14 @@ async function handleHistorySearchSubmit(event) {
 
 async function executeHistorySearch(query) {
   const normalizedQuery = String(query || '').trim();
+  const fromDate = normalizeHistorySearchDateValue(historySearchFromInputEl?.value ?? state.historySearchFromDate);
+  const toDate = normalizeHistorySearchDateValue(historySearchToInputEl?.value ?? state.historySearchToDate);
+  const limit = readHistorySearchLimit(historySearchLimitSelectEl?.value ?? state.historySearchLimit);
   state.historySearchQuery = normalizedQuery;
   state.historySearchError = '';
+  state.historySearchFromDate = fromDate;
+  state.historySearchToDate = toDate;
+  state.historySearchLimit = limit;
   state.historySearchActiveMessageId = null;
   state.historySearchShowingRecents = false;
 
@@ -1614,6 +1696,15 @@ async function executeHistorySearch(query) {
     return;
   }
 
+  if (!isHistorySearchDateRangeValid(fromDate, toDate)) {
+    state.historySearchResults = [];
+    state.historySearchTotal = 0;
+    state.historySearchLoading = false;
+    state.historySearchError = t('status.searchDateRangeInvalid');
+    renderHistorySearchPanel();
+    return;
+  }
+
   const requestId = state.historySearchRequestId + 1;
   state.historySearchRequestId = requestId;
   state.historySearchResults = [];
@@ -1622,7 +1713,13 @@ async function executeHistorySearch(query) {
   renderHistorySearchPanel();
 
   try {
-    const payload = await apiGet(`/api/openclaw-webchat/agents/${encodeURIComponent(state.activeAgentId)}/history/search?q=${encodeURIComponent(normalizedQuery)}&limit=20`);
+    const params = new URLSearchParams({
+      q: normalizedQuery,
+      limit: String(limit)
+    });
+    if (fromDate) params.set('from', fromDate);
+    if (toDate) params.set('to', toDate);
+    const payload = await apiGet(`/api/openclaw-webchat/agents/${encodeURIComponent(state.activeAgentId)}/history/search?${params.toString()}`);
     if (requestId !== state.historySearchRequestId || !state.activeAgentId) return;
     state.historySearchResults = Array.isArray(payload?.results) ? payload.results : [];
     state.historySearchTotal = Number(payload?.total) || state.historySearchResults.length;
@@ -1777,12 +1874,17 @@ function renderMessages() {
 }
 
 function highlightSearchTextInElement(element, query) {
-  const normalizedQuery = String(query || '').trim();
-  if (!element || !normalizedQuery) return;
+  const terms = collectHistorySearchHighlightTerms(query);
+  if (!element || !terms.length) return;
 
-  const escapedQuery = escapeRegExp(normalizedQuery);
-  const splitMatcher = new RegExp(`(${escapedQuery})`, 'giu');
-  const testMatcher = new RegExp(escapedQuery, 'iu');
+  const matcher = terms
+    .map((item) => escapeRegExp(item))
+    .sort((a, b) => b.length - a.length)
+    .join('|');
+  if (!matcher) return;
+
+  const splitMatcher = new RegExp(`(${matcher})`, 'giu');
+  const testMatcher = new RegExp(matcher, 'iu');
   const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
@@ -1818,6 +1920,47 @@ function highlightSearchTextInElement(element, query) {
 
 function escapeRegExp(value) {
   return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function collectHistorySearchHighlightTerms(query) {
+  const normalizedQuery = String(query || '')
+    .trim()
+    .replace(/\s+/g, ' ');
+  if (!normalizedQuery) return [];
+
+  const terms = normalizedQuery.split(/\s+/).filter(Boolean);
+  return Array.from(new Set([normalizedQuery, ...terms]));
+}
+
+function normalizeHistorySearchDateValue(value) {
+  const normalized = String(value || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : '';
+}
+
+function readHistorySearchLimit(value) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_HISTORY_SEARCH_LIMIT;
+  if (parsed <= 20) return 20;
+  if (parsed >= 100) return 100;
+  return 50;
+}
+
+function isHistorySearchDateRangeValid(fromDate, toDate) {
+  if (!fromDate || !toDate) return true;
+  return fromDate <= toDate;
+}
+
+function describeHistorySearchFilters() {
+  const parts = [];
+  if (state.historySearchFromDate && state.historySearchToDate) {
+    parts.push(`${t('ui.searchDateFrom')} ${state.historySearchFromDate} - ${state.historySearchToDate}`);
+  } else if (state.historySearchFromDate) {
+    parts.push(`${t('ui.searchDateFrom')} ${state.historySearchFromDate}`);
+  } else if (state.historySearchToDate) {
+    parts.push(`${t('ui.searchDateTo')} ${state.historySearchToDate}`);
+  }
+  parts.push(`${t('ui.searchResultLimit')} ${state.historySearchLimit}`);
+  return parts.join(' · ');
 }
 
 function renderMediaBlock(block, bubble = null) {

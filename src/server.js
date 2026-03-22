@@ -226,14 +226,25 @@ app.get('/api/openclaw-webchat/agents/:agentId/history', (req, res) => {
 app.get('/api/openclaw-webchat/agents/:agentId/history/search', (req, res) => {
   const { agentId } = req.params;
   const query = normalizeOptionalString(req.query.q);
-  const limit = clampInt(req.query.limit, 20, 1, 50);
+  const limit = clampInt(req.query.limit, 50, 1, 100);
+  const fromDate = normalizeOptionalString(req.query.from);
+  const toDate = normalizeOptionalString(req.query.to);
 
   if (!query) {
     return res.status(400).json({ error: 'Search query is required.' });
   }
 
+  const fromTimestamp = parseHistorySearchDateFilter(fromDate, 'start');
+  const toTimestamp = parseHistorySearchDateFilter(toDate, 'end');
+  if (Number.isNaN(fromTimestamp) || Number.isNaN(toTimestamp)) {
+    return res.status(400).json({ error: 'Invalid search date filter.' });
+  }
+  if (fromTimestamp !== null && toTimestamp !== null && fromTimestamp > toTimestamp) {
+    return res.status(400).json({ error: 'Search start date must not be later than end date.' });
+  }
+
   try {
-    const result = searchHistory({ agentId, query, limit });
+    const result = searchHistory({ agentId, query, limit, fromDate, toDate, fromTimestamp, toTimestamp });
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: formatError(error) });
@@ -1419,35 +1430,48 @@ function getHistoryPage({ agentId, limit, before }) {
   };
 }
 
-function searchHistory({ agentId, query, limit }) {
-  const normalizedQuery = String(query || '').trim();
+function searchHistory({ agentId, query, limit, fromDate = null, toDate = null, fromTimestamp = null, toTimestamp = null }) {
+  const pattern = createHistorySearchPattern(query);
   const rows = loadHistory(agentId)
     .sort(compareHistoryAsc)
     .reverse();
 
-  const results = [];
-  let total = 0;
+  const matches = [];
 
   for (const row of rows) {
+    if (!isHistoryRowWithinSearchRange(row, fromTimestamp, toTimestamp)) continue;
+
     const searchableText = buildHistorySearchText(row);
     if (!searchableText) continue;
-    if (!matchesSearchQuery(searchableText, normalizedQuery)) continue;
+    const match = matchHistorySearchText(searchableText, pattern);
+    if (!match) continue;
 
-    total += 1;
-    if (results.length >= limit) continue;
-
-    results.push({
-      id: row.id,
-      role: row.role,
-      createdAt: row.createdAt,
-      excerpt: extractSearchExcerpt(searchableText, normalizedQuery),
-      summary: buildMessageSummary(row)
+    matches.push({
+      row,
+      match,
+      searchableText
     });
   }
 
+  matches.sort(compareHistorySearchMatch);
+
+  const total = matches.length;
+  const results = matches.slice(0, limit).map(({ row, match, searchableText }) => ({
+    id: row.id,
+    role: row.role,
+    createdAt: row.createdAt,
+    excerpt: extractSearchExcerpt(searchableText, match.excerptQuery || pattern.query),
+    summary: buildMessageSummary(row)
+  }));
+
   return {
-    query: normalizedQuery,
+    query: pattern.query,
     total,
+    limit,
+    filters: {
+      from: fromDate,
+      to: toDate
+    },
     results
   };
 }
@@ -1549,11 +1573,113 @@ function buildHistorySearchText(row) {
     .trim();
 }
 
-function matchesSearchQuery(text, query) {
-  const haystack = String(text || '').toLocaleLowerCase();
-  const needle = String(query || '').trim().toLocaleLowerCase();
-  if (!needle) return false;
-  return haystack.includes(needle);
+function createHistorySearchPattern(query) {
+  const normalizedQuery = String(query || '')
+    .trim()
+    .replace(/\s+/g, ' ');
+  const foldedQuery = foldHistorySearchText(normalizedQuery);
+  const compactQuery = compactHistorySearchText(normalizedQuery);
+  const terms = Array.from(new Set(
+    foldedQuery
+      .split(/\s+/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  ));
+
+  return {
+    query: normalizedQuery,
+    foldedQuery,
+    compactQuery,
+    terms,
+    compactTerms: terms.map((item) => compactHistorySearchText(item))
+  };
+}
+
+function matchHistorySearchText(text, pattern) {
+  const foldedText = foldHistorySearchText(text);
+  if (!foldedText || !pattern?.query) return null;
+
+  const compactText = compactHistorySearchText(text);
+  const compactFoldedQuery = pattern.foldedQuery.replace(/\s+/g, '');
+  let score = 0;
+  let matched = false;
+  let excerptQuery = pattern.query;
+  let bestIndex = Number.POSITIVE_INFINITY;
+  let matchedTerms = 0;
+
+  if (pattern.foldedQuery && foldedText.includes(pattern.foldedQuery)) {
+    matched = true;
+    score += 140;
+    const index = foldedText.indexOf(pattern.foldedQuery);
+    if (index >= 0 && index < bestIndex) {
+      bestIndex = index;
+      excerptQuery = pattern.query;
+    }
+  }
+
+  if (pattern.compactQuery && pattern.compactQuery !== compactFoldedQuery && compactText.includes(pattern.compactQuery)) {
+    matched = true;
+    score += 100;
+  }
+
+  let allTermsMatched = pattern.terms.length > 0;
+  for (let index = 0; index < pattern.terms.length; index += 1) {
+    const term = pattern.terms[index];
+    const compactTerm = pattern.compactTerms[index];
+    const termIndex = foldedText.indexOf(term);
+    const termMatched = termIndex >= 0 || (compactTerm && compactText.includes(compactTerm));
+    if (!termMatched) {
+      allTermsMatched = false;
+      break;
+    }
+
+    matchedTerms += 1;
+    score += 24;
+    if (termIndex >= 0 && termIndex < bestIndex) {
+      bestIndex = termIndex;
+      excerptQuery = term;
+    }
+  }
+
+  if (allTermsMatched && matchedTerms > 0) {
+    matched = true;
+    score += 60 + matchedTerms * 6;
+  }
+
+  if (!matched) return null;
+
+  return {
+    score,
+    excerptQuery
+  };
+}
+
+function compareHistorySearchMatch(a, b) {
+  const scoreDiff = Number(b?.match?.score || 0) - Number(a?.match?.score || 0);
+  if (scoreDiff !== 0) return scoreDiff;
+  return compareHistoryAsc(b.row, a.row);
+}
+
+function isHistoryRowWithinSearchRange(row, fromTimestamp, toTimestamp) {
+  const createdAt = Date.parse(String(row?.createdAt || ''));
+  if (!Number.isFinite(createdAt)) return false;
+  if (fromTimestamp !== null && createdAt < fromTimestamp) return false;
+  if (toTimestamp !== null && createdAt > toTimestamp) return false;
+  return true;
+}
+
+function foldHistorySearchText(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .toLocaleLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Mark}+/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function compactHistorySearchText(value) {
+  return foldHistorySearchText(value).replace(/[\s\p{P}\p{S}_]+/gu, '');
 }
 
 function extractSearchExcerpt(text, query, maxLength = 120) {
@@ -1717,11 +1843,40 @@ async function gatewayCall(method, params) {
   });
 
   const raw = String(stdout || '').trim() || '{}';
-  try {
-    return JSON.parse(raw);
-  } catch {
-    throw new Error(`gateway ${method} returned non-JSON: ${stderr || raw.slice(0, 300)}`);
+  const parsed = parseGatewayJsonOutput(raw);
+  if (parsed !== null) {
+    return parsed;
   }
+  throw new Error(`gateway ${method} returned non-JSON: ${stderr || raw.slice(0, 300)}`);
+}
+
+function parseGatewayJsonOutput(raw) {
+  const normalized = String(raw || '').trim();
+  if (!normalized) return {};
+
+  try {
+    return JSON.parse(normalized);
+  } catch {
+    // Some plugins print startup diagnostics before the JSON payload.
+  }
+
+  const lines = normalized.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const first = lines[index]?.trimStart();
+    if (!first) continue;
+    if (!first.startsWith('{') && !first.startsWith('[')) continue;
+
+    const candidate = lines.slice(index).join('\n').trim();
+    if (!candidate) continue;
+
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // keep scanning for the first line that starts a valid JSON payload
+    }
+  }
+
+  return null;
 }
 
 function extractTextFromGatewayMessage(message) {
@@ -2350,6 +2505,29 @@ function isTimestampRecent(value, windowMs) {
 function normalizeOptionalString(value) {
   const text = String(value ?? '').trim();
   return text || null;
+}
+
+function parseHistorySearchDateFilter(value, boundary = 'start') {
+  const normalized = normalizeOptionalString(value);
+  if (!normalized) return null;
+
+  const matched = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!matched) return Number.NaN;
+
+  const year = Number(matched[1]);
+  const month = Number(matched[2]);
+  const day = Number(matched[3]);
+  const date = boundary === 'end'
+    ? new Date(year, month - 1, day, 23, 59, 59, 999)
+    : new Date(year, month - 1, day, 0, 0, 0, 0);
+  const timestamp = date.getTime();
+
+  if (!Number.isFinite(timestamp)) return Number.NaN;
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return Number.NaN;
+  }
+
+  return timestamp;
 }
 
 function firstNonEmpty(...values) {

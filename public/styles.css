@@ -661,6 +661,49 @@ button {
   display: none;
 }
 
+.history-search-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.history-search-filter {
+  min-width: 0;
+  flex: 1 1 150px;
+  display: grid;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.history-search-filter span {
+  padding-left: 2px;
+}
+
+.history-search-filter input,
+.history-search-filter select {
+  width: 100%;
+  min-width: 0;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-1);
+  color: var(--text);
+  padding: 9px 11px;
+  font: inherit;
+}
+
+.history-search-filter input:focus,
+.history-search-filter select:focus {
+  outline: none;
+  border-color: rgba(59, 130, 246, 0.38);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.history-search-filter-limit {
+  flex: 0 0 110px;
+}
+
 .history-search-results {
   display: grid;
   gap: 8px;
@@ -1990,6 +2033,14 @@ button {
   .history-search-shell {
     flex: 1 1 auto;
     max-width: none;
+  }
+
+  .history-search-filter {
+    flex-basis: calc(50% - 4px);
+  }
+
+  .history-search-filter-limit {
+    flex: 1 1 100%;
   }
 
   .composer-actions {

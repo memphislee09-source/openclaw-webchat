@@ -61,6 +61,9 @@ async function checkPageShell() {
   assert(html.includes('id="historySearchShell"'), 'page should contain persistent history search shell');
   assert(html.includes('id="historySearchPanel"'), 'page should contain history search panel');
   assert(html.includes('id="historySearchInput"'), 'page should contain history search input');
+  assert(html.includes('id="historySearchFromInput"'), 'page should contain history search start date input');
+  assert(html.includes('id="historySearchToInput"'), 'page should contain history search end date input');
+  assert(html.includes('id="historySearchLimitSelect"'), 'page should contain history search limit select');
   assert(html.includes('id="historySearchResults"'), 'page should contain history search results container');
   assert(html.includes('id="settingsPanel"'), 'page should contain settingsPanel');
   assert(html.includes('id="settingsContactSelect"'), 'page should contain settingsContactSelect');
@@ -105,6 +108,8 @@ async function checkPageShell() {
   assert(css.includes('.history-search-shell'), 'styles.css should include persistent history search shell styles');
   assert(css.includes('.history-search-inline-form'), 'styles.css should include inline history search form styles');
   assert(css.includes('.history-search-panel'), 'styles.css should include history search panel styles');
+  assert(css.includes('.history-search-filters'), 'styles.css should include history search filter row styles');
+  assert(css.includes('.history-search-filter'), 'styles.css should include history search filter styles');
   assert(css.includes('.history-search-result'), 'styles.css should include history search result styles');
   assert(css.includes('.history-search-result.active'), 'styles.css should include active history search result styles');
   assert(css.includes('.history-search-result.recent'), 'styles.css should include recent history search list styles');
@@ -321,9 +326,14 @@ async function checkHistory() {
 }
 
 async function checkHistorySearch() {
-  const payload = await getJson(`/api/openclaw-webchat/agents/${encodeURIComponent(agentId)}/history/search?q=${encodeURIComponent(unique)}&limit=5`);
+  const normalizedUnique = unique.replace('-', ' ');
+  const today = formatLocalDate(new Date());
+  const payload = await getJson(`/api/openclaw-webchat/agents/${encodeURIComponent(agentId)}/history/search?q=${encodeURIComponent(normalizedUnique)}&limit=100&from=${today}&to=${today}`);
   assert(Array.isArray(payload?.results), 'history search should return results array');
   assert(typeof payload?.total === 'number', 'history search should return total count');
+  assert(payload?.limit === 100, 'history search should echo the requested result limit');
+  assert(payload?.filters?.from === today, 'history search should echo the start date filter');
+  assert(payload?.filters?.to === today, 'history search should echo the end date filter');
   assert(payload.results.some((item) => String(item?.excerpt || '').includes(unique) || String(item?.summary || '').includes(unique)), 'history search should find the unique token');
 }
 
@@ -337,6 +347,13 @@ function collectText(message) {
 function readBinding(targetAgentId) {
   const bindings = JSON.parse(fs.readFileSync(bindingsFile, 'utf8'));
   return bindings?.[targetAgentId] || null;
+}
+
+function formatLocalDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 async function getJson(path) {

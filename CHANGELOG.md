@@ -6,6 +6,16 @@ The format is intentionally lightweight and follows a simple versioned release l
 
 ## [Unreleased]
 
+### Added
+- Add history search phase 2 first slice with date filters, `20 / 50 / 100` result limits, and stronger query matching for the current agent timeline
+
+### Changed
+- Improve search-result highlighting and search panel metadata so active date/limit filters stay visible
+
+### Fixed
+- Make gateway CLI parsing resilient when plugin diagnostics are printed before JSON output, restoring slash-command stability for `/model`, `/think`, and related upstream queries
+- Restore full local selftest coverage after `memory-lancedb-pro` installation by recording plugin install provenance in the local OpenClaw config
+
 ## [0.1.4] - 2026-03-19
 
 ### Changed
