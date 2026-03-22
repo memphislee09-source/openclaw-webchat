@@ -3,6 +3,11 @@
 - what changed
 - why it changed
 
+## User-Facing Impact
+
+- what users will notice
+- screenshots or screen recordings if the UI changed
+
 ## Checks
 
 - [ ] `npm run check`
@@ -10,6 +15,8 @@
 - [ ] relevant docs updated
 - [ ] `CHANGELOG.md` updated for user-facing changes
 
-## Notes
+## Risks And Follow-Up
 
-Any rollout notes, risks, screenshots, or follow-up items.
+- rollout notes
+- known risks
+- follow-up work

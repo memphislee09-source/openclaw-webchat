@@ -4,39 +4,49 @@ A standalone WebChat for OpenClaw with long-lived per-agent history, local media
 
 `openclaw-webchat` 是一个独立于 OpenClaw 默认 WebUI 的 WebChat 项目，目标是在不深度耦合官方前端实现的前提下，提供更稳定的历史保留、富媒体体验和多会话隔离能力。
 
-## Status
+## At A Glance
 - Current version: `0.1.4`
-- Stability: `alpha`
+- Stability: `alpha`, but already usable for local-first personal workflows
 - Default branch: `main`
 - Recommended deployment: local machine or private network behind Tailscale / equivalent access control
-- Current priorities:
-  - verify mobile history loading stability and fix the root cause if needed
-  - continue visual media bubble regression checks
-  - run broader multi-agent / late-reply regression
-  - validate the successful audio transcription path
-  - continue refining history search after the first phase-2 slice shipped
+- Best fit: people who want a dedicated OpenClaw chat surface with long-lived history, media support, and per-agent isolation
 
-## What This Project Does
-- Keeps a long-lived timeline for each OpenClaw agent inside the `openclaw-webchat` namespace
-- Stores displayable history locally in JSONL instead of depending on upstream internal logs for rendering
-- Supports assistant rich media rendering for images, audio, video, and files
-- Supports user image upload and audio upload with optional local Whisper transcription
-- Preserves local history across `/new` while resetting only the upstream context
-- Provides a dedicated web UI with agent list, search, settings, avatars, and responsive layout
-- Adds local slash command handling for common session and model operations
-- Lets `/model` open an agent-scoped picker that shows the current model and available `provider/model` targets
-- Adds date-filtered history search with stronger matching and larger result windows
-- Uses a send/stop dual-state composer button so the current agent task can be aborted directly from the input area
+## Why This Exists
+- Keep a long-lived timeline for each OpenClaw agent inside the `openclaw-webchat` namespace
+- Store displayable history locally in JSONL instead of depending on upstream internal logs for rendering
+- Preserve local history across `/new` while resetting only the upstream context
+- Support assistant rich media rendering for images, audio, video, and files
+- Support user image upload and audio upload with optional local Whisper transcription
+- Add local slash command handling for common session and model operations
+- Let `/model` open an agent-scoped picker that shows the current model and available `provider/model` targets
+- Add date-filtered history search with stronger matching and larger result windows
+- Use a send/stop dual-state composer button so the current agent task can be aborted directly from the input area
 
-## Scope And Non-Goals
-`openclaw-webchat` is intentionally scoped as a focused companion UI for OpenClaw.
+## Screenshots
+![Main UI](docs/images/main-ui.png)
 
-Current non-goals:
-- sync history with the default OpenClaw WebUI
-- sync history with Slack, Discord, or other external channels
-- expose a public-internet, multi-tenant hosted SaaS deployment
-- add a built-in authentication system for the MVP
-- publish this repo as an npm package
+![Model Picker](docs/images/model-picker.png)
+
+![History Search](docs/images/history-search.png)
+
+![Settings](docs/images/settings.png)
+
+## Installation Options
+
+### Option 1: Download A Release Bundle
+Use this when you want the easiest public-release install path and prefer a packaged artifact from GitHub Releases.
+
+- For maintainers building the artifact: run `npm run bundle`
+- For human operators: download the release bundle asset from the latest GitHub Release, then follow the agent-safe guide below
+- For OpenClaw agents: use [docs/AGENT_INSTALL_BUNDLE.md](docs/AGENT_INSTALL_BUNDLE.md)
+
+### Option 2: Install Over The Network
+Use this when you want the latest published repository state or need the agent to fetch dependencies directly.
+
+- For OpenClaw agents: use [docs/AGENT_INSTALL_NETWORK.md](docs/AGENT_INSTALL_NETWORK.md)
+
+### Public Release Checklist
+- Before recommending the project in the OpenClaw community, run through [docs/PUBLIC_RELEASE_CHECKLIST.md](docs/PUBLIC_RELEASE_CHECKLIST.md)
 
 ## Quick Start
 
@@ -53,7 +63,34 @@ npm start
 
 The service listens on `http://127.0.0.1:3770` by default.
 
-### Runtime Configuration
+Basic health check:
+
+```bash
+curl http://127.0.0.1:3770/healthz
+```
+
+## What Users Get
+- Dedicated API namespace: `/api/openclaw-webchat/*`
+- Stable `agentId -> session` binding
+- Local JSONL history with visible-only messages
+- Rich media parsing with structured blocks plus `MEDIA:` / `mediaUrl:` fallbacks
+- Search within the current agent timeline with jump-to-hit and keyword highlight
+- History search with date filters, larger result sets, and stronger matching
+- Agent-scoped model picker for `/model` / `/models`, including current-model summary and direct model switching
+- Composer send/stop dual-state button wired to gateway `chat.abort` for the current agent session
+- Chat polish for consistent avatar sizing, steadier pinned-bottom behavior while agents are processing, and visible pre-play video previews
+- Responsive layout for desktop, tablet, and mobile drawer navigation
+- User and agent avatar/profile customization
+- Theme presets plus Simplified Chinese / English UI switching
+
+## Compatibility And Assumptions
+- OpenClaw is expected to be installed and usable before WebChat setup begins
+- The current default background-service guidance is macOS-oriented and uses `launchd`
+- Manual `npm start` still works without `launchd`
+- The project does not currently target public-internet multi-tenant hosting
+- Document access scope follows the current OpenClaw configuration
+
+## Runtime Configuration
 
 Useful environment variables:
 
@@ -64,15 +101,15 @@ Useful environment variables:
 | `OPENCLAW_BIN` | `openclaw` | Path to the OpenClaw CLI |
 | `OPENCLAW_WEBCHAT_DATA_DIR` | `./data` | Runtime data directory |
 | `OPENCLAW_WEBCHAT_MEDIA_SECRET` | auto-generated | Media token signing secret |
-| `OPENCLAW_WEBCHAT_LAUNCHD_LABEL` | `ai.openclaw.webchat` | launchd label used by the in-app restart action on macOS |
+| `OPENCLAW_WEBCHAT_LAUNCHD_LABEL` | `ai.openclaw.webchat` | `launchd` label used by the in-app restart action on macOS |
 | `OPENCLAW_WEBCHAT_GITHUB_URL` | project repo URL | GitHub link shown in the settings "About" panel |
 
-### Access Modes
+## Access Modes
 - Local browser on the same machine: works out of the box with the default loopback bind
 - LAN browser access: supported by switching the access mode to LAN in the settings UI and then restarting the service
 - Tailscale access: supported when your Tailnet can already reach this machine; the app itself does not require a separate Tailscale integration layer
 
-The settings UI now includes:
+The settings UI includes:
 - an Appearance section for theme presets
 - an interface language switch with Simplified Chinese and English
 - access mode switching between local-only and LAN / Tailscale-friendly binding
@@ -82,14 +119,8 @@ The settings UI now includes:
 - an About section with project summary and GitHub link
 - a Manual Start section with install, start, and restart command hints
 - a reminder when a service restart is required for access-mode changes
-- an in-app restart action for launchd-managed macOS setups, plus a manual restart command hint
+- an in-app restart action for `launchd`-managed macOS setups, plus a manual restart command hint
 - a note that document access scope follows the current OpenClaw configuration instead of a separate WebChat-only restriction
-
-Basic health check:
-
-```bash
-curl http://127.0.0.1:3770/healthz
-```
 
 For a macOS background service workflow, this repo includes an example launch script:
 
@@ -101,22 +132,23 @@ This script is a project-local example, not a universal installer.
 
 ## Security And Deployment Notes
 - This project is designed first for local or private-network use.
-- It does not ship with a built-in auth layer for public internet exposure.
-- Document access scope follows the current OpenClaw configuration.
+- It does not ship with a complete auth layer for direct public internet exposure.
+- Lightweight auth is helpful for shared LAN-style access, but it is not a substitute for a hardened public deployment boundary.
 - Local media rendering follows OpenClaw/runtime output plus the current instance auth boundary rather than a separate WebChat-only document/media restriction.
-- LAN access is supported, but it is an explicit operator choice. Prefer the default loopback bind unless you intentionally need access from other devices.
-- If you use LAN mode, you can optionally enable a lightweight shared password from the settings panel.
 - Listener rebinding is not hot-swapped inside the current Node process, so switching between local-only and LAN bind modes still requires a service restart.
 - Before exposing it beyond your own machine or private mesh, read [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) and [SECURITY.md](SECURITY.md).
 
 ## Repository Guide
 
 ### Public Docs
-- [README.md](README.md): project overview and quick start
+- [README.md](README.md): project overview and install entry points
 - [CHANGELOG.md](CHANGELOG.md): release-oriented change log
 - [CONTRIBUTING.md](CONTRIBUTING.md): contribution workflow and local checks
 - [SECURITY.md](SECURITY.md): vulnerability reporting and supported versions
 - [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md): deployment assumptions and security boundaries
+- [docs/PUBLIC_RELEASE_CHECKLIST.md](docs/PUBLIC_RELEASE_CHECKLIST.md): public-release preparation checklist
+- [docs/AGENT_INSTALL_BUNDLE.md](docs/AGENT_INSTALL_BUNDLE.md): agent-safe guide for release bundle installation
+- [docs/AGENT_INSTALL_NETWORK.md](docs/AGENT_INSTALL_NETWORK.md): agent-safe guide for network-based installation
 
 ### Engineering Docs
 - [status.md](status.md): current project status and read order for ongoing development
@@ -127,7 +159,7 @@ This script is a project-local example, not a universal installer.
 - [docs/error.md](docs/error.md): incident and fix log
 - [docs/HANDOFF-2026-03-22.md](docs/HANDOFF-2026-03-22.md): latest mainline handoff
 
-## Development Checks
+## Development And Release Checks
 ```bash
 npm run check
 ```
@@ -140,22 +172,13 @@ npm run selftest
 
 `selftest` assumes you already have a usable local OpenClaw environment. CI does not rely on that external dependency.
 
-## Current Highlights
-- Dedicated API namespace: `/api/openclaw-webchat/*`
-- Stable `agentId -> session` binding
-- Local JSONL history with visible-only messages
-- Rich media parsing with structured blocks plus `MEDIA:` / `mediaUrl:` fallbacks
-- Search within the current agent timeline with jump-to-hit and keyword highlight
-- History search phase 2 first slice with date filters, larger result sets, and stronger matching
-- Agent-scoped model picker for `/model` / `/models`, including current-model summary and direct model switching
-- Composer send/stop dual-state button wired to gateway `chat.abort` for the current agent session
-- Chat polish for consistent avatar sizing, steadier pinned-bottom behavior while agents are processing, and visible pre-play video previews
-- Responsive layout for desktop, tablet, and mobile drawer navigation
-- User and agent avatar/profile customization
-- Theme presets and lighter chat-bubble visual treatment
-- Retry and timeout handling for gateway and long-running assistant responses
+To build a release bundle artifact for GitHub Releases:
 
-## Contribution And Release Expectations
+```bash
+npm run bundle
+```
+
+## Contribution Expectations
 - Update relevant docs before or alongside code changes.
 - Keep changes small, reviewable, and easy to roll back.
 - Run the documented checks before opening a pull request.

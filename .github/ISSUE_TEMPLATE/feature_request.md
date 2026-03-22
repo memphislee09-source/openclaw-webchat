@@ -14,9 +14,17 @@ What user problem or workflow gap are you trying to solve?
 
 Describe the feature or change you want to see.
 
+## User Value
+
+Who benefits from this, and what becomes easier or safer for them?
+
 ## Why It Fits This Project
 
 Explain why this belongs in `openclaw-webchat` instead of an external tool, a separate integration, or the upstream OpenClaw UI.
+
+## Current Workaround
+
+If you have one, describe the current workaround and why it is not good enough.
 
 ## Additional Context
 

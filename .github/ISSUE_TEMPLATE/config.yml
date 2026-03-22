@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Install From Release Bundle
+    url: https://github.com/memphislee09-source/openclaw-webchat/blob/main/docs/AGENT_INSTALL_BUNDLE.md
+    about: Use the step-by-step bundle install guide before opening an installation issue.
+  - name: Install Over The Network
+    url: https://github.com/memphislee09-source/openclaw-webchat/blob/main/docs/AGENT_INSTALL_NETWORK.md
+    about: Use the step-by-step network install guide before opening an installation issue.
+  - name: Public Release Checklist
+    url: https://github.com/memphislee09-source/openclaw-webchat/blob/main/docs/PUBLIC_RELEASE_CHECKLIST.md
+    about: Review the public release checklist for rollout and readiness work.

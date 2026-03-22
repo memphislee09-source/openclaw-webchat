@@ -15,7 +15,10 @@ Briefly describe the bug.
 - OS:
 - Node version:
 - OpenClaw version or context:
-- Branch / commit:
+- Browser:
+- Install method: release bundle / network install / local dev / unknown
+- Access mode: local-only / LAN / Tailscale / unknown
+- Branch / commit / release tag:
 
 ## Steps To Reproduce
 
@@ -36,3 +39,9 @@ What happened instead?
 Add relevant logs, screenshots, or terminal output.
 
 Please remove secrets, tokens, and private transcript content before posting.
+
+## Checks Already Run
+
+- [ ] `npm run check`
+- [ ] `npm run selftest` (if a usable local OpenClaw environment was available)
+- [ ] I reviewed the relevant install guide if this is an installation issue
