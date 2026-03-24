@@ -52,8 +52,11 @@
 - [x] Re-render and verify the final seconds of the promo video after the CTA restore
 - [x] Replace the README screenshot section with the new promo video entry
 - [x] Verify the README now points to the tracked promo video artifact instead of static screenshots
-- [ ] Switch the README demo section from a local video link to a homepage-visible GitHub attachment embed
-- [ ] Push the README embed update to GitHub and verify the new mainline commit
+- [x] Switch the README demo section from a local video link to a homepage-visible GitHub attachment embed
+- [x] Push the README embed update to GitHub and verify the new mainline commit
+- [x] Rework the public README homepage into a bilingual landing page
+- [x] Add one-click language switch links for Chinese and English on the GitHub repo homepage
+- [ ] Push the bilingual README update to GitHub and verify the new mainline commit
 
 ## Review
 - Read `status.md`, `docs/HANDOFF-2026-03-24.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`,
@@ -248,3 +251,16 @@
   - Artifact verification passed:
     `ffprobe` confirms `docs/media/claw-webchat-promo-v4.mp4` is `1920x1080`, duration `39.914667s`,
     size about `9.0MB`.
+- README homepage embed follow-up:
+  - Replaced the local-repo video link as the primary demo surface with the provided
+    `github.com/user-attachments/assets/...` URL so the promo video can render directly on the GitHub
+    repository homepage.
+  - Kept the tracked repository copy as a secondary download link under the embedded video.
+  - Synced to GitHub on `main` with commit `d10de51` (`docs: embed promo video on repo homepage`).
+- README bilingual homepage follow-up:
+  - Reworked `README.md` into a bilingual landing page with a shared top-level video area and explicit
+    language-switch links: `简体中文` and `English`.
+  - Added stable in-page anchors `#zh-cn` and `#en` so users can jump between the two language sections
+    with one click from the GitHub repository homepage.
+  - Mirrored the public-facing project overview, installation paths, quick start, capability summary,
+    security notes, and docs navigation in both Chinese and English.
