@@ -39,7 +39,7 @@
 - [x] Audit public install docs against the two required install paths
 - [x] Tighten bundle/network agent install guides so both are step-by-step with checks and low-capability fallback
 - [x] Update public release docs/checklist to reflect the stronger install-doc requirement
-- [ ] Verify the doc-only follow-up and sync it to GitHub
+- [x] Verify the doc-only follow-up and sync it to GitHub
 
 ## Review
 - Read `status.md`, `docs/HANDOFF-2026-03-24.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`,
@@ -186,3 +186,4 @@
   - Updated `README.md`, `docs/PUBLIC_RELEASE_CHECKLIST.md`, `CHANGELOG.md`, and `status.md` so
     the public repo now states this install-doc standard explicitly.
   - Verification passed: `npm run check`.
+  - Synced to GitHub on `main` with commit `dfa3089` (`docs: tighten public install guides`).
