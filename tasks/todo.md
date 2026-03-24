@@ -56,7 +56,7 @@
 - [x] Push the README embed update to GitHub and verify the new mainline commit
 - [x] Rework the public README homepage into a bilingual landing page
 - [x] Add one-click language switch links for Chinese and English on the GitHub repo homepage
-- [ ] Push the bilingual README update to GitHub and verify the new mainline commit
+- [x] Push the bilingual README update to GitHub and verify the new mainline commit
 
 ## Review
 - Read `status.md`, `docs/HANDOFF-2026-03-24.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`,
@@ -264,3 +264,4 @@
     with one click from the GitHub repository homepage.
   - Mirrored the public-facing project overview, installation paths, quick start, capability summary,
     security notes, and docs navigation in both Chinese and English.
+  - Synced to GitHub on `main` with commit `6ec7c14` (`docs: add bilingual repo homepage`).
