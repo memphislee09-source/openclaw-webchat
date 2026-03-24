@@ -10,7 +10,7 @@
 - [x] Add regression coverage for local and remote media fallback directives
 - [x] Verify with `npm run check` and `npm run selftest`
 - [x] Update status, handoff, changelog, and error-log docs for the media protocol fix
-- [ ] Commit and push the media protocol fix to GitHub
+- [x] Commit and push the media protocol fix to GitHub
 
 ## Review
 - Read `status.md`, `docs/HANDOFF-2026-03-24.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`,
@@ -43,3 +43,4 @@
   - Added selftest coverage for both local-path and remote-URL fallback directives, plus a static
     assertion that the bootstrap contract keeps the new media guidance.
   - Verification passed: `npm run check`, `npm run selftest`.
+  - Synced to GitHub on `main` with commit `59aa488` (`fix: tighten webchat media bootstrap`).
