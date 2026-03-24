@@ -60,6 +60,8 @@
 - [x] Create a `tools/` documentation folder for reusable tool-operation guides
 - [x] Document the full narrated promo-video workflow for future reuse
 - [x] Verify and sync the new tools docs to GitHub
+- [x] Move non-project-specific tool docs out of the repo into the shared iCloud dev docs folder
+- [ ] Remove the repo-local `tools/` directory and sync the cleanup to GitHub
 
 ## Review
 - Read `status.md`, `docs/HANDOFF-2026-03-24.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`,
@@ -279,3 +281,8 @@
     `media/video/remotion-promo/src/Root.tsx`,
     and `media/video/source-shots/`.
   - Synced to GitHub on `main` with commit `e2b51df` (`docs: add tools video workflow guide`).
+- Tools docs relocation follow-up:
+  - Moved the entire repo-local `tools/` folder to the shared archive path:
+    `/Users/memphis/Library/Mobile Documents/com~apple~CloudDocs/dev/codex-docs/claw-webchat/tools/`
+  - Kept the original `tools/` structure in the archive so future reusable docs can continue to live
+    there without being tied to the project repository.
