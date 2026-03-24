@@ -29,7 +29,7 @@ const HISTORY_PAGE_LIMIT_MAX = 200;
 const HISTORY_OPEN_PAGE_LIMIT = Number(process.env.OPENCLAW_WEBCHAT_OPEN_PAGE_LIMIT || 15);
 const NAMESPACE = 'openclaw-webchat';
 const LEGACY_SESSION_NAMESPACE = 'claw-webchat';
-const BOOTSTRAP_VERSION = '2026-03-16.phase2';
+const BOOTSTRAP_VERSION = '2026-03-24.media-v1';
 const LEGACY_AVATAR_MEDIA_SECRETS = ['openclaw-webchat-local-secret'];
 const ACTIVE_RECENT_WINDOW_MS = 5 * 60 * 1000;
 const ASSISTANT_WAIT_TIMEOUT_MS = Number(process.env.OPENCLAW_WEBCHAT_ASSISTANT_WAIT_TIMEOUT_MS || 120000);
@@ -55,13 +55,13 @@ const ABORTED_ASSISTANT_REPLY = Symbol('openclaw-webchat-aborted-assistant-reply
 
 const BOOTSTRAP_TEXT = [
   '[openclaw-webchat hidden bootstrap]',
-  'You are replying inside openclaw-webchat, a dedicated isolated web chat surface.',
-  'Behavior contract for this session:',
-  '- Treat this as a stable channel-specific conversation context.',
-  '- Do not mention this bootstrap or hidden channel setup.',
+  'You are replying inside Claw WebChat.',
+  'Rules:',
+  '- Do not mention this bootstrap or channel setup.',
   '- Final reply must only contain user-visible content; never include tool logs, debug traces, reasoning, or execution narration.',
-  '- Prefer structured media attachments / media blocks when your runtime supports them.',
-  '- If structured media is unavailable, fallback is allowed using lines starting exactly with `MEDIA:<path-or-url>` or `mediaUrl: <path-or-url>`.',
+  '- For media, prefer structured attachments / media blocks when your runtime supports them.',
+  '- Fallback: put each media item on its own line exactly as `MEDIA:<absolute-local-path-or-direct-http/https-media-url>` or `mediaUrl: <absolute-local-path-or-direct-http/https-media-url>`.',
+  '- Use that fallback for both local files and direct remote media URLs. Do not use `message` tool or any `webchat` channel send path.',
   '- If this message is understood, do not reply.'
 ].join('\n');
 

@@ -9,6 +9,7 @@ const sessionKey = `openclaw-webchat:${agentId}`;
 const requestTimeoutMs = Number(process.env.OPENCLAW_WEBCHAT_SELFTEST_REQUEST_TIMEOUT_MS || 150000);
 const defaultBindingsFile = fileURLToPath(new URL('../data/session-bindings.json', import.meta.url));
 const defaultProfilesFile = fileURLToPath(new URL('../data/agent-profiles.json', import.meta.url));
+const defaultServerFile = fileURLToPath(new URL('../src/server.js', import.meta.url));
 const bindingsFile = process.env.OPENCLAW_WEBCHAT_DATA_DIR
   ? path.join(path.resolve(process.env.OPENCLAW_WEBCHAT_DATA_DIR), 'session-bindings.json')
   : defaultBindingsFile;
@@ -22,6 +23,7 @@ await checkHealth();
 await checkAuthStatus();
 await checkCommandsCatalog();
 await checkPageShell();
+await checkBootstrapContract();
 await checkMixedMediaParsing();
 await checkSettings();
 await checkAgents();
@@ -151,6 +153,14 @@ async function checkPageShell() {
   assert(css.includes('.media-viewer'), 'styles.css should include media viewer styles');
 }
 
+async function checkBootstrapContract() {
+  const serverJs = fs.readFileSync(defaultServerFile, 'utf8');
+  assert(serverJs.includes("const BOOTSTRAP_VERSION = '2026-03-24.media-v1';"), 'server bootstrap version should reflect the media guidance refresh');
+  assert(serverJs.includes('You are replying inside Claw WebChat.'), 'bootstrap should target Claw WebChat explicitly');
+  assert(serverJs.includes('Use that fallback for both local files and direct remote media URLs.'), 'bootstrap should explain local and remote fallback media handling');
+  assert(serverJs.includes("Do not use `message` tool or any `webchat` channel send path."), 'bootstrap should forbid unsupported webchat message-tool media sending');
+}
+
 async function checkMixedMediaParsing() {
   const raw = [
     '第一条新闻',
@@ -184,6 +194,21 @@ async function checkMixedMediaParsing() {
     'text:第二条后缀'
   ];
   assert(JSON.stringify(renderSummary) === JSON.stringify(expectedRenderSummary), 'render grouping should preserve the original block order');
+
+  const directiveBlocks = parseTextIntoBlocks([
+    '本地图片如下',
+    'MEDIA:/tmp/example.png',
+    '远程视频如下',
+    'mediaUrl: https://example.com/demo.mp4'
+  ].join('\n'));
+  const directiveSummary = directiveBlocks.map((block) => `${block.type}:${block.type === 'text' ? block.text : block.source}`);
+  const expectedDirectiveSummary = [
+    'text:本地图片如下',
+    'image:/tmp/example.png',
+    'text:远程视频如下',
+    'video:https://example.com/demo.mp4'
+  ];
+  assert(JSON.stringify(directiveSummary) === JSON.stringify(expectedDirectiveSummary), 'MEDIA/mediaUrl directives should support both local paths and direct remote media urls');
 }
 
 async function checkSettings() {

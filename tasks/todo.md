@@ -1,0 +1,45 @@
+# Task Todo
+
+## Current Task
+- [x] Confirm repository path and current branch baseline
+- [x] Read handoff and core project documentation
+- [x] Summarize current architecture, shipped capabilities, and open risks
+- [x] Add a short review/result note for this reading pass
+- [x] Investigate why Athena did not send images correctly in Claw WebChat
+- [x] Tighten and shorten the hidden media bootstrap contract
+- [x] Add regression coverage for local and remote media fallback directives
+- [x] Verify with `npm run check` and `npm run selftest`
+- [x] Update status, handoff, changelog, and error-log docs for the media protocol fix
+- [ ] Commit and push the media protocol fix to GitHub
+
+## Review
+- Read `status.md`, `docs/HANDOFF-2026-03-24.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`,
+  `docs/error.md`, `docs/REQUIREMENTS.md`, `docs/SECURITY_MODEL.md`, `docs/PROJECT_CHARTER.md`,
+  `README.md`, and `package.json`.
+- Current baseline is `main` at `0.1.5`; user-visible branding is `Claw WebChat`, while backend
+  technical identifiers intentionally remain `openclaw-webchat`.
+- Current architecture remains a lightweight Node/Express adapter plus static frontend, with local
+  JSONL history, per-agent session binding, media proxy/signing, and a narrow OpenClaw gateway
+  integration surface.
+- The main unresolved product risks are still mobile history loading stability, media bubble/manual
+  visual regression, multi-agent late-reply regression coverage, audio transcription success-path
+  validation, and the next batch of history-search polish.
+- Athena image-send investigation:
+  - `main`/Athena has the current bootstrap marker in `data/session-bindings.json`
+    (`bootstrapVersion: 2026-03-16.phase2`), so this was not a missing-bootstrap case.
+  - Raw upstream history shows Athena (`gpt-5.4`) generated the image successfully, then tried the
+    `message` tool with `channel: "webchat"` and got `Unknown channel: webchat`, after which it
+    told the user it could not send the image.
+  - A successful Baichai case shows the model returning a plain text reply ending with
+    `MEDIA:/absolute/path.png`, which WebChat parses into an image block.
+  - Current hidden bootstrap explains `MEDIA:` / `mediaUrl:` fallback, but it is not explicit
+    enough to steer Athena away from an unsupported `message` tool path.
+- Media protocol follow-up:
+  - Refreshed `BOOTSTRAP_VERSION` to `2026-03-24.media-v1` so existing sessions can pick up the
+    tighter media contract on the next open/send after version mismatch.
+  - Shortened the bootstrap text while making the contract stricter: local files and direct
+    remote `http/https` media URLs should use the `MEDIA:` / `mediaUrl:` fallback, and agents are
+    told not to use the unsupported `message` tool / `webchat` channel path.
+  - Added selftest coverage for both local-path and remote-URL fallback directives, plus a static
+    assertion that the bootstrap contract keeps the new media guidance.
+  - Verification passed: `npm run check`, `npm run selftest`.

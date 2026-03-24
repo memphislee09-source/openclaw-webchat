@@ -29,3 +29,6 @@
 - 聊天页自动跟随滚动存在回归风险 / 原因：消息区当前主要依赖多处直接 `scrollMessagesToBottom()` 调用，缺少统一“用户是否仍希望贴底”的状态管理，处理中/媒体加载/轮询刷新叠加时容易出现跟随不稳定 / 修复：新增统一 `autoScrollPinned` 状态，滚动事件实时维护贴底偏好；发送、slash、本地处理中和媒体加载统一经 `maybeScrollMessagesToBottom(...)` 决策，避免多处分散硬滚到底 / 预防措施：消息区自动滚动应统一收口，避免多处分散调用互相覆盖
 - 旧头像 token 在新 secret 策略下无法反解 / 原因：更早期 profile 中仍可能持久化旧版签名头像 URL；服务端改为随机 secret 后，这些历史 token 无法被当前 `decodeMediaToken(...)` 反解回稳定文件路径 / 修复：在头像迁移链路中对历史默认 secret 保留受限兼容，只用于 profile 里的旧 token 反解为稳定路径；媒体访问接口仍只接受当前 secret 签发的新 token / 预防措施：涉及签名策略切换时要保留受限迁移通道，确保已持久化配置不会断裂，同时不要恢复旧 token 的通用访问能力
 - 左侧 agent 列表整列重绘导致身份信息被频繁刷新 / 原因：当前 `refreshAgents()` 每次轮询都直接 `renderAgentList()` 清空并重建整列 DOM，头像和显示名也会跟随重复刷新；这与“身份信息由设置页主动推送，摘要/状态才轮询刷新”的交互预期不一致 / 修复：左栏改为局部 diff 复用现有卡片 DOM；轮询只更新 presence、最新回复摘要和时间，设置保存时才主动刷新头像与名称 / 预防措施：轮询列表应区分“静态身份信息”和“动态会话状态”，避免全量重绘
+
+## 2026-03-24
+- Athena 在 Claw WebChat 中不会把已生成图片正确发回 / 原因：当前隐藏 bootstrap 虽然提到了 `MEDIA:` / `mediaUrl:` fallback，但约束不够明确；`gpt-5.4` 会优先尝试 `message` 工具并使用不存在的 `webchat` channel，最终误判为“当前没有可用的 webchat 附件发送通道” / 修复：将隐藏 bootstrap 收短并明确写死本地文件与直链远程 `http/https` 媒体的正确回传方式，要求优先结构化 media block，fallback 时使用单独一行 `MEDIA:<path-or-url>` / `mediaUrl: <path-or-url>`，并明确禁止 `message` / `webchat` 发送路径；同时提升 `BOOTSTRAP_VERSION` 让现有会话自动补吃新版约定，并在自测中增加本地路径与远程 URL fallback 断言 / 预防措施：渠道级媒体协议提示必须同时满足“足够明确”和“足够短”；一旦发现某类模型倾向走错误工具路径，应优先收紧 bootstrap 文案并补静态回归，避免靠逐个 agent 手工提醒

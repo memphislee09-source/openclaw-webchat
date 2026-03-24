@@ -8,9 +8,11 @@ The format is intentionally lightweight and follows a simple versioned release l
 
 ### Changed
 - Rename the display-facing product branding to `Claw WebChat` across the UI and public-facing docs while keeping backend identifiers, API paths, environment variables, and repository coordinates unchanged
+- Refresh the hidden Claw WebChat bootstrap so agents get a shorter but stricter media contract for local files and direct remote `http/https` media URLs
 
 ### Fixed
 - Normalize stored `sessionKey` values to the `openclaw-webchat:*` prefix while still accepting legacy `claw-webchat:*` requests, so local selftest and existing browser sessions stay aligned
+- Steer agents away from the unsupported `message` / `webchat` channel send path so generated local media and referenced remote media render correctly inside Claw WebChat without per-agent manual reminders
 
 ## [0.1.5] - 2026-03-24
 
