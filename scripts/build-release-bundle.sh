@@ -5,8 +5,8 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
 TMP_DIR="$(mktemp -d)"
 VERSION="$(cd "$ROOT_DIR" && node -p "require('./package.json').version")"
-BUNDLE_NAME="openclaw-webchat-v${VERSION}-bundle"
-ARCHIVE_ROOT="openclaw-webchat"
+BUNDLE_NAME="claw-webchat-v${VERSION}-bundle"
+ARCHIVE_ROOT="claw-webchat"
 STAGE_DIR="$TMP_DIR/$ARCHIVE_ROOT"
 
 cleanup() {

@@ -573,7 +573,7 @@ const state = {
   projectInfo: {
     name: BRAND_NAME,
     summary: '一个面向个人使用的 Claw WebChat，强调本地优先、长历史、媒体上传和更顺手的 agent 交流体验。',
-    githubUrl: 'https://github.com/memphislee09-source/openclaw-webchat'
+    githubUrl: 'https://github.com/memphislee09-source/claw-webchat'
   },
   serviceSettings: {
     networkAccess: 'local',
@@ -1184,7 +1184,7 @@ function normalizeProjectInfo(payload) {
   return {
     name: BRAND_NAME,
     summary: payload?.summary || '一个面向个人使用的 Claw WebChat，强调本地优先、长历史、媒体上传和更顺手的 agent 交流体验。',
-    githubUrl: payload?.githubUrl || 'https://github.com/memphislee09-source/openclaw-webchat'
+    githubUrl: payload?.githubUrl || 'https://github.com/memphislee09-source/claw-webchat'
   };
 }
 

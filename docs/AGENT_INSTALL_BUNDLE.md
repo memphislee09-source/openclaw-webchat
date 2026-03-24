@@ -1,6 +1,6 @@
 # Agent Install Guide: Release Bundle
 
-This guide is written for OpenClaw agents that need to install, configure, and enable `openclaw-webchat` from a downloaded release bundle.
+This guide is written for OpenClaw agents that need to install, configure, and enable `claw-webchat` from a downloaded release bundle.
 
 ## Agent Execution Contract
 
@@ -57,8 +57,8 @@ If any check fails:
 Run:
 
 ```bash
-ls -lh /ABSOLUTE/PATH/TO/openclaw-webchat-RELEASE-BUNDLE.tar.gz
-tar -tzf /ABSOLUTE/PATH/TO/openclaw-webchat-RELEASE-BUNDLE.tar.gz | head -20
+ls -lh /ABSOLUTE/PATH/TO/claw-webchat-RELEASE-BUNDLE.tar.gz
+tar -tzf /ABSOLUTE/PATH/TO/claw-webchat-RELEASE-BUNDLE.tar.gz | head -20
 ```
 
 Check:
@@ -71,8 +71,8 @@ If the archive cannot be listed, stop and ask for a valid bundle file.
 If a checksum file exists next to the bundle, also run:
 
 ```bash
-shasum -a 256 /ABSOLUTE/PATH/TO/openclaw-webchat-RELEASE-BUNDLE.tar.gz
-cat /ABSOLUTE/PATH/TO/openclaw-webchat-RELEASE-BUNDLE.sha256
+shasum -a 256 /ABSOLUTE/PATH/TO/claw-webchat-RELEASE-BUNDLE.tar.gz
+cat /ABSOLUTE/PATH/TO/claw-webchat-RELEASE-BUNDLE.sha256
 ```
 
 Only continue if the two SHA256 values match.
@@ -83,14 +83,14 @@ Create the install directory if needed, then extract:
 
 ```bash
 mkdir -p /ABSOLUTE/PATH/TO/INSTALL_PARENT
-tar -xzf /ABSOLUTE/PATH/TO/openclaw-webchat-RELEASE-BUNDLE.tar.gz -C /ABSOLUTE/PATH/TO/INSTALL_PARENT
+tar -xzf /ABSOLUTE/PATH/TO/claw-webchat-RELEASE-BUNDLE.tar.gz -C /ABSOLUTE/PATH/TO/INSTALL_PARENT
 ```
 
 Check:
 
 ```bash
 ls -la /ABSOLUTE/PATH/TO/INSTALL_PARENT
-ls -la /ABSOLUTE/PATH/TO/INSTALL_PARENT/openclaw-webchat
+ls -la /ABSOLUTE/PATH/TO/INSTALL_PARENT/claw-webchat
 ```
 
 Confirm:
@@ -146,7 +146,7 @@ If the user wants a custom port or data directory, prepare those too:
 
 ```bash
 export OPENCLAW_WEBCHAT_PORT=3770
-export OPENCLAW_WEBCHAT_DATA_DIR=/ABSOLUTE/PATH/TO/openclaw-webchat-data
+export OPENCLAW_WEBCHAT_DATA_DIR=/ABSOLUTE/PATH/TO/claw-webchat-data
 ```
 
 Check:
@@ -209,7 +209,7 @@ If the target machine is macOS and the user wants a LaunchAgent:
 1. Confirm the launch helper exists:
 
 ```bash
-test -f /ABSOLUTE/PATH/TO/openclaw-webchat/scripts/run-webchat-launchd.sh && echo OK
+test -f /ABSOLUTE/PATH/TO/claw-webchat/scripts/run-webchat-launchd.sh && echo OK
 ```
 
 2. Create the LaunchAgent directories and log directory:
@@ -231,18 +231,18 @@ cat > "$HOME/Library/LaunchAgents/ai.openclaw.webchat.plist" <<'PLIST'
   <string>ai.openclaw.webchat</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/ABSOLUTE/PATH/TO/openclaw-webchat/scripts/run-webchat-launchd.sh</string>
+    <string>/ABSOLUTE/PATH/TO/claw-webchat/scripts/run-webchat-launchd.sh</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>/ABSOLUTE/PATH/TO/openclaw-webchat</string>
+  <string>/ABSOLUTE/PATH/TO/claw-webchat</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/Users/USERNAME/.openclaw/logs/openclaw-webchat.stdout.log</string>
+  <string>/Users/USERNAME/.openclaw/logs/claw-webchat.stdout.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/USERNAME/.openclaw/logs/openclaw-webchat.stderr.log</string>
+  <string>/Users/USERNAME/.openclaw/logs/claw-webchat.stderr.log</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>HOME</key>
@@ -254,7 +254,7 @@ cat > "$HOME/Library/LaunchAgents/ai.openclaw.webchat.plist" <<'PLIST'
     <key>OPENCLAW_WEBCHAT_HOST</key>
     <string>127.0.0.1</string>
     <key>OPENCLAW_WEBCHAT_DATA_DIR</key>
-    <string>/ABSOLUTE/PATH/TO/openclaw-webchat-data</string>
+    <string>/ABSOLUTE/PATH/TO/claw-webchat-data</string>
   </dict>
 </dict>
 </plist>
@@ -285,7 +285,7 @@ Minimum checks:
 ```bash
 launchctl print gui/$(id -u)/ai.openclaw.webchat | head -40
 curl -sf http://127.0.0.1:3770/healthz
-tail -n 20 "$HOME/.openclaw/logs/openclaw-webchat.stderr.log"
+tail -n 20 "$HOME/.openclaw/logs/claw-webchat.stderr.log"
 ```
 
 Confirm:

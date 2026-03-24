@@ -43,7 +43,7 @@ const UPLOAD_SOURCE_PREFIX = 'openclaw-upload:';
 const AUTH_COOKIE_NAME = 'openclaw_webchat_auth';
 const AUTH_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const PROJECT_GITHUB_URL = normalizeOptionalString(process.env.OPENCLAW_WEBCHAT_GITHUB_URL)
-  || 'https://github.com/memphislee09-source/openclaw-webchat';
+  || 'https://github.com/memphislee09-source/claw-webchat';
 const RESTART_LABEL = normalizeOptionalString(process.env.OPENCLAW_WEBCHAT_LAUNCHD_LABEL)
   || normalizeOptionalString(process.env.XPC_SERVICE_NAME)
   || 'ai.openclaw.webchat';

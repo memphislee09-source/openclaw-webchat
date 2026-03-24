@@ -1,5 +1,5 @@
 {
-  "name": "openclaw-webchat",
+  "name": "claw-webchat",
   "description": "Standalone WebChat for OpenClaw with long-lived history and media support",
   "version": "0.1.5",
   "private": true,

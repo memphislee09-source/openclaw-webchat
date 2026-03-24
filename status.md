@@ -1,4 +1,4 @@
-# status.md — openclaw-webchat
+# status.md — claw-webchat
 
 ## 读取顺序
 1. 先读本文件
@@ -6,12 +6,12 @@
 3. 需要补背景时再读 `docs/ARCHITECTURE.md`、`docs/ROADMAP.md`、`docs/error.md`
 
 ## 项目概览
-- 项目名：`openclaw-webchat`
+- 项目名：`claw-webchat`
 - 当前版本：`0.1.5`（manifest: `0.1.5`）
 - 当前主线：`main`
-- 仓库地址：`https://github.com/memphislee09-source/openclaw-webchat`
+- 仓库地址：`https://github.com/memphislee09-source/claw-webchat`
 - 项目目标：构建独立于默认 WebUI 的 OpenClaw WebChat，强化历史保留、富媒体体验和多会话稳定性
-- 当前品牌显示：面向用户与公开页面统一显示为 `Claw WebChat`；后端技术标识仍保持 `openclaw-webchat`
+- 当前品牌显示：面向用户与公开页面统一显示为 `Claw WebChat`；仓库 slug 与本地目录统一为 `claw-webchat`；后端技术标识仍保持 `openclaw-webchat`
 
 ## 当前基线
 - `0.1.5` 已合入 `main`，后续统一以主线为开发基点

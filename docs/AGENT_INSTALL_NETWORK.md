@@ -1,6 +1,6 @@
 # Agent Install Guide: Network Install
 
-This guide is written for OpenClaw agents that need to install `openclaw-webchat` by downloading the necessary software and repository contents over the network.
+This guide is written for OpenClaw agents that need to install `claw-webchat` by downloading the necessary software and repository contents over the network.
 
 ## Agent Execution Contract
 
@@ -76,21 +76,21 @@ Use this when the user wants a stable public install:
 ```bash
 mkdir -p /ABSOLUTE/PATH/TO/INSTALL_PARENT
 cd /ABSOLUTE/PATH/TO/INSTALL_PARENT
-RELEASE_TAG="$(curl -fsSL https://api.github.com/repos/memphislee09-source/openclaw-webchat/releases/latest | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
+RELEASE_TAG="$(curl -fsSL https://api.github.com/repos/memphislee09-source/claw-webchat/releases/latest | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
 test -n "$RELEASE_TAG" && echo "Resolved release tag: $RELEASE_TAG"
-ARCHIVE_PATH="openclaw-webchat-${RELEASE_TAG}.tar.gz"
-curl -fL "https://github.com/memphislee09-source/openclaw-webchat/archive/refs/tags/${RELEASE_TAG}.tar.gz" -o "$ARCHIVE_PATH"
+ARCHIVE_PATH="claw-webchat-${RELEASE_TAG}.tar.gz"
+curl -fL "https://github.com/memphislee09-source/claw-webchat/archive/refs/tags/${RELEASE_TAG}.tar.gz" -o "$ARCHIVE_PATH"
 EXTRACTED_DIR="$(tar -tzf "$ARCHIVE_PATH" | head -1 | cut -d/ -f1)"
 test -n "$EXTRACTED_DIR" && echo "Archive root: $EXTRACTED_DIR"
 tar -xzf "$ARCHIVE_PATH"
-rm -rf openclaw-webchat
-mv "$EXTRACTED_DIR" openclaw-webchat
+rm -rf claw-webchat
+mv "$EXTRACTED_DIR" claw-webchat
 ```
 
 Check before moving on:
 - `Resolved release tag: ...` was printed
 - `Archive root: ...` was printed
-- `openclaw-webchat/package.json` exists after the move
+- `claw-webchat/package.json` exists after the move
 
 ### Option B: Install From `main`
 
@@ -99,15 +99,15 @@ Use this only when the user explicitly wants the latest mainline state:
 ```bash
 mkdir -p /ABSOLUTE/PATH/TO/INSTALL_PARENT
 cd /ABSOLUTE/PATH/TO/INSTALL_PARENT
-git clone https://github.com/memphislee09-source/openclaw-webchat.git
-cd openclaw-webchat
+git clone https://github.com/memphislee09-source/claw-webchat.git
+cd claw-webchat
 git checkout main
 ```
 
 Check:
 
 ```bash
-cd /ABSOLUTE/PATH/TO/INSTALL_PARENT/openclaw-webchat
+cd /ABSOLUTE/PATH/TO/INSTALL_PARENT/claw-webchat
 test -f package.json && echo OK
 test -d src && echo OK
 test -d public && echo OK
@@ -160,7 +160,7 @@ Optional examples:
 
 ```bash
 export OPENCLAW_WEBCHAT_PORT=3770
-export OPENCLAW_WEBCHAT_DATA_DIR=/ABSOLUTE/PATH/TO/openclaw-webchat-data
+export OPENCLAW_WEBCHAT_DATA_DIR=/ABSOLUTE/PATH/TO/claw-webchat-data
 ```
 
 Check:
@@ -233,18 +233,18 @@ cat > "$HOME/Library/LaunchAgents/ai.openclaw.webchat.plist" <<'PLIST'
   <string>ai.openclaw.webchat</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/ABSOLUTE/PATH/TO/openclaw-webchat/scripts/run-webchat-launchd.sh</string>
+    <string>/ABSOLUTE/PATH/TO/claw-webchat/scripts/run-webchat-launchd.sh</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>/ABSOLUTE/PATH/TO/openclaw-webchat</string>
+  <string>/ABSOLUTE/PATH/TO/claw-webchat</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/Users/USERNAME/.openclaw/logs/openclaw-webchat.stdout.log</string>
+  <string>/Users/USERNAME/.openclaw/logs/claw-webchat.stdout.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/USERNAME/.openclaw/logs/openclaw-webchat.stderr.log</string>
+  <string>/Users/USERNAME/.openclaw/logs/claw-webchat.stderr.log</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>HOME</key>
@@ -256,7 +256,7 @@ cat > "$HOME/Library/LaunchAgents/ai.openclaw.webchat.plist" <<'PLIST'
     <key>OPENCLAW_WEBCHAT_HOST</key>
     <string>127.0.0.1</string>
     <key>OPENCLAW_WEBCHAT_DATA_DIR</key>
-    <string>/ABSOLUTE/PATH/TO/openclaw-webchat-data</string>
+    <string>/ABSOLUTE/PATH/TO/claw-webchat-data</string>
   </dict>
 </dict>
 </plist>
@@ -289,7 +289,7 @@ Checks:
 ```bash
 launchctl print gui/$(id -u)/ai.openclaw.webchat | head -40
 curl -sf http://127.0.0.1:3770/healthz
-tail -n 20 "$HOME/.openclaw/logs/openclaw-webchat.stderr.log"
+tail -n 20 "$HOME/.openclaw/logs/claw-webchat.stderr.log"
 ```
 
 Confirm:
