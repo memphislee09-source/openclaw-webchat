@@ -28,6 +28,7 @@ const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 const HISTORY_PAGE_LIMIT_MAX = 200;
 const HISTORY_OPEN_PAGE_LIMIT = Number(process.env.OPENCLAW_WEBCHAT_OPEN_PAGE_LIMIT || 15);
 const NAMESPACE = 'openclaw-webchat';
+const LEGACY_SESSION_NAMESPACE = 'claw-webchat';
 const BOOTSTRAP_VERSION = '2026-03-16.phase2';
 const LEGACY_AVATAR_MEDIA_SECRETS = ['openclaw-webchat-local-secret'];
 const ACTIVE_RECENT_WINDOW_MS = 5 * 60 * 1000;
@@ -159,7 +160,7 @@ app.get('/api/openclaw-webchat/commands', (_req, res) => {
 app.get('/api/openclaw-webchat/agents', async (_req, res) => {
   try {
     const agents = await listAgents();
-    const bindings = readJson(BINDINGS_FILE);
+    const bindings = readBindings();
     const profiles = readJson(PROFILES_FILE);
 
     const items = agents.map((agentId) => {
@@ -1388,7 +1389,7 @@ function resolveThinkingDefaultForModel({ provider, model, catalog = [] }) {
 }
 
 function ensureBinding(agentId) {
-  const bindings = readJson(BINDINGS_FILE);
+  const bindings = readBindings();
   const existing = bindings[agentId];
   if (existing) return existing;
 
@@ -1397,7 +1398,7 @@ function ensureBinding(agentId) {
   const created = {
     agentId,
     namespace: NAMESPACE,
-    sessionKey: `${NAMESPACE}:${agentId}`,
+    sessionKey: buildBindingSessionKey(agentId),
     upstreamGeneration,
     upstreamSessionKey: buildUpstreamSessionKey(agentId, upstreamGeneration),
     bootstrapVersion: null,
@@ -1408,26 +1409,71 @@ function ensureBinding(agentId) {
   };
 
   bindings[agentId] = created;
-  writeJson(BINDINGS_FILE, bindings);
+  writeBindings(bindings);
   return created;
 }
 
 function getBinding(agentId) {
-  const bindings = readJson(BINDINGS_FILE);
+  const bindings = readBindings();
   return bindings[agentId] || null;
 }
 
 function getBindingBySessionKey(sessionKey) {
-  const bindings = readJson(BINDINGS_FILE);
-  return Object.values(bindings).find((item) => item.sessionKey === sessionKey) || null;
+  const bindings = readBindings();
+  const expectedSessionKey = normalizeBindingSessionKey(sessionKey);
+  return Object.values(bindings).find((item) => normalizeBindingSessionKey(item.sessionKey) === expectedSessionKey) || null;
 }
 
 function patchBinding(agentId, patch) {
-  const bindings = readJson(BINDINGS_FILE);
+  const bindings = readBindings();
   if (!bindings[agentId]) throw new Error(`Binding not found: ${agentId}`);
-  bindings[agentId] = { ...bindings[agentId], ...patch };
-  writeJson(BINDINGS_FILE, bindings);
+  bindings[agentId] = normalizeBindingRecord(agentId, { ...bindings[agentId], ...patch });
+  writeBindings(bindings);
   return bindings[agentId];
+}
+
+function readBindings() {
+  const bindings = readJson(BINDINGS_FILE);
+  const normalized = {};
+  let changed = false;
+
+  for (const [agentId, binding] of Object.entries(bindings || {})) {
+    const nextBinding = normalizeBindingRecord(agentId, binding);
+    normalized[agentId] = nextBinding;
+    if (JSON.stringify(nextBinding) !== JSON.stringify(binding)) {
+      changed = true;
+    }
+  }
+
+  if (changed) writeBindings(normalized);
+  return normalized;
+}
+
+function writeBindings(bindings) {
+  writeJson(BINDINGS_FILE, bindings);
+}
+
+function normalizeBindingRecord(agentId, binding) {
+  const normalizedAgentId = String(agentId || binding?.agentId || '').trim();
+  const next = binding && typeof binding === 'object' ? { ...binding } : {};
+  next.agentId = normalizedAgentId;
+  next.namespace = NAMESPACE;
+  next.sessionKey = buildBindingSessionKey(normalizedAgentId);
+  return next;
+}
+
+function buildBindingSessionKey(agentId) {
+  return `${NAMESPACE}:${String(agentId || '').trim()}`;
+}
+
+function normalizeBindingSessionKey(sessionKey) {
+  const normalized = String(sessionKey || '').trim();
+  if (!normalized) return '';
+  const legacyPrefix = `${LEGACY_SESSION_NAMESPACE}:`;
+  if (normalized.startsWith(legacyPrefix)) {
+    return `${NAMESPACE}:${normalized.slice(legacyPrefix.length)}`;
+  }
+  return normalized;
 }
 
 async function ensureBootstrapInjected(binding) {
@@ -2110,7 +2156,7 @@ function summarizeText(text) {
 }
 
 async function listAgents() {
-  const bindings = readJson(BINDINGS_FILE);
+  const bindings = readBindings();
   const ids = new Set(Object.keys(bindings));
   const root = path.resolve(process.env.HOME || '', '.openclaw/agents');
 

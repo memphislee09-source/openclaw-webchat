@@ -6,6 +6,9 @@ The format is intentionally lightweight and follows a simple versioned release l
 
 ## [Unreleased]
 
+### Fixed
+- Normalize stored `sessionKey` values to the `openclaw-webchat:*` prefix while still accepting legacy `claw-webchat:*` requests, so local selftest and existing browser sessions stay aligned
+
 ## [0.1.5] - 2026-03-24
 
 ### Added

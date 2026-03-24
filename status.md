@@ -51,7 +51,7 @@
   - 图片查看器右上角缩放读数会跟随真实缩放比例动态刷新，不再固定显示 `1:1`
   - 已补公开发布资料第一套：README 首页重写、公开发布 checklist、GitHub issue/PR 模板增强、截图归档与两套 agent 安装指南
   - 已新增 release bundle 打包脚本，可生成 GitHub Release 用的整合安装包与 SHA256 校验文件
-  - `selftest` 脚本仍保留为本地集成烟测入口；当前实例已确认 `npm run check` 通过，但 `selftest` 仍存在 `sessionKey` 前缀断言与历史绑定数据不一致的已知问题
+  - 本地 `selftest` 已恢复通过；旧的 `claw-webchat:*` sessionKey 绑定会在服务端自动迁移并继续兼容
 
 ## 已完成能力
 - 独立命名空间与 API：`/api/openclaw-webchat/*`
@@ -107,7 +107,7 @@
 
 ## 已知重点
 - 2026-03-24 `0.1.5` 已将历史搜索第二阶段首批增强、agent 级 `/model` 切换、发送/停止双态按钮、`chat.abort` 停止链路、公开发布准备资料和图片查看器缩放读数修复一起并入 `main`
-- 当前本机 `selftest` 仍卡在 `openclaw-webchat:*` 与历史 `claw-webchat:*` sessionKey 前缀不一致上，需后续单独收口
+- 2026-03-24 已修复 `sessionKey` 前缀不一致：服务端会把历史 `claw-webchat:*` 绑定自动规范到 `openclaw-webchat:*`，并继续兼容旧 key 请求
 - 2026-03-22 已完成历史搜索第二阶段首批增强：日期筛选、更大结果集、分词/紧凑匹配排序与结果高亮
 - 2026-03-22 已修复 gateway CLI stdout 被插件诊断日志污染时导致 `/model` / `/think` 失败的问题
 - 2026-03-22 已补上当前 agent 级模型切换弹窗：无参 `/model` / `/models` 会弹出可用模型列表，点击后直接切换当前 agent 的上游 session 模型
