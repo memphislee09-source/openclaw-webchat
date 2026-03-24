@@ -59,7 +59,7 @@
 - [x] Push the bilingual README update to GitHub and verify the new mainline commit
 - [x] Create a `tools/` documentation folder for reusable tool-operation guides
 - [x] Document the full narrated promo-video workflow for future reuse
-- [ ] Verify and sync the new tools docs to GitHub
+- [x] Verify and sync the new tools docs to GitHub
 
 ## Review
 - Read `status.md`, `docs/HANDOFF-2026-03-24.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`,
@@ -278,3 +278,4 @@
     `media/video/remotion-promo/src/PromoVideo.tsx`,
     `media/video/remotion-promo/src/Root.tsx`,
     and `media/video/source-shots/`.
+  - Synced to GitHub on `main` with commit `e2b51df` (`docs: add tools video workflow guide`).
