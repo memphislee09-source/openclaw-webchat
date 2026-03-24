@@ -33,6 +33,11 @@ A standalone WebChat for agent workflows on top of an existing OpenClaw runtime,
 
 ## Installation Options
 
+Quick download links:
+- Latest release page: [github.com/memphislee09-source/claw-webchat/releases/latest](https://github.com/memphislee09-source/claw-webchat/releases/latest)
+- Current bundle asset: [claw-webchat-v0.1.6-bundle.tar.gz](https://github.com/memphislee09-source/claw-webchat/releases/download/v0.1.6/claw-webchat-v0.1.6-bundle.tar.gz)
+- Current checksum: [claw-webchat-v0.1.6-bundle.sha256](https://github.com/memphislee09-source/claw-webchat/releases/download/v0.1.6/claw-webchat-v0.1.6-bundle.sha256)
+
 ### Option 1: Download A Release Bundle
 Use this when you want the easiest public-release install path and prefer a packaged artifact from GitHub Releases.
 
