@@ -77,6 +77,7 @@ curl http://127.0.0.1:3770/healthz
 - Search within the current agent timeline with jump-to-hit and keyword highlight
 - History search with date filters, larger result sets, and stronger matching
 - Agent-scoped model picker for `/model` / `/models`, including current-model summary and direct model switching
+- Composer-side thinking quick switch with a dynamic `T:*` badge and model-aware thinking-level options for the current session
 - Composer send/stop dual-state button wired to gateway `chat.abort` for the current agent session
 - Chat polish for consistent avatar sizing, steadier pinned-bottom behavior while agents are processing, and visible pre-play video previews
 - Responsive layout for desktop, tablet, and mobile drawer navigation
@@ -115,8 +116,9 @@ The settings UI includes:
 - access mode switching between local-only and LAN / Tailscale-friendly binding
 - optional light authentication for shared LAN-style access
 - an agent-scoped `/model` picker that can switch the current upstream session model directly
+- a composer-side `T:*` thinking control that reflects the current session thinking level and switches it without typing `/think`
 - a send icon in the composer that flips to a stop icon while the current agent is processing, and stops the current run when clicked
-- an About section with project summary and GitHub link
+- an About section with project summary, current version, and GitHub link
 - a Manual Start section with install, start, and restart command hints
 - a reminder when a service restart is required for access-mode changes
 - an in-app restart action for `launchd`-managed macOS setups, plus a manual restart command hint
