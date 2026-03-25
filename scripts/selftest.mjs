@@ -126,7 +126,7 @@ async function checkPageShell() {
   assert(appJs.includes('groupMessageBlocksForRender'), 'app.js should include shared block render grouping');
   assert(appJs.includes('const previousTop = messageListEl.scrollTop;'), 'app.js should preserve pre-load scroll offset when prepending history');
   assert(appJs.includes('previousTop + (nextHeight - previousHeight)'), 'app.js should restore scroll position relative to prepended history height');
-  assert(appJs.includes("return state.scrollMode === 'follow-bottom' && state.autoScrollPinned;"), 'app.js should gate bottom stickiness through the explicit follow-bottom scroll mode');
+  assert(appJs.includes("return state.scrollMode === 'follow-bottom' && state.autoScrollPinned ? 'follow-bottom' : 'preserve-anchor';"), 'app.js should derive viewport policy from the explicit follow-bottom mode instead of ad-hoc scroll writes');
   assert(appJs.includes('function captureVisibleMessageAnchor()'), 'app.js should include a visible-message anchor capture helper');
   assert(appJs.includes('async function handleConversationNavigationKey(event)'), 'app.js should include keyboard navigation handling for the conversation pane');
   assert(appJs.includes("conversationRefreshNoticeEl.textContent = state.pendingConversationRefreshSyncing"), 'app.js should render a dedicated pending-refresh notice for history readers');
@@ -191,6 +191,11 @@ async function checkBootstrapContract() {
   assert(appJs.includes("source.addEventListener('conversation-update', handleServerEvent);"), 'app should subscribe to conversation-update SSE events');
   assert(appJs.includes('queueBackgroundRefresh();'), 'app should queue background refresh work from SSE or fallback polling');
   assert(appJs.includes('}, 60000);'), 'fallback polling should be reduced to a low-frequency safety net');
+  assert(appJs.includes('function captureConversationViewportSnapshot() {'), 'app should capture unified conversation viewport snapshots before rerendering');
+  assert(appJs.includes('function scheduleConversationViewportRestore(snapshot) {'), 'app should restore the viewport through a unified post-render helper');
+  assert(appJs.includes('function runProgrammaticScroll(action) {'), 'app should wrap programmatic message-list scrolling so user scroll state is not invalidated');
+  assert(appJs.includes('state.viewportRevision += 1;'), 'app should version viewport snapshots so stale async restores can be ignored');
+  assert(appJs.includes('const snapshot = captureConversationViewportSnapshot();'), 'media-load pinning should reuse the unified viewport snapshot helper');
   assert(appJs.includes('const THINKING_PICKER_CACHE_TTL_MS = 15000;'), 'app should cache thinking picker payloads briefly for warm reopen');
   assert(appJs.includes("state.thinkingPickerNotice = t('status.thinkingSwitchDone'"), 'thinking picker should keep a visible success notice after switching');
   assert(serverJs.includes('You are replying inside Claw WebChat.'), 'bootstrap should target Claw WebChat explicitly');

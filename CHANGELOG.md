@@ -18,6 +18,7 @@ The format is intentionally lightweight and follows a simple versioned release l
 - Rework the conversation pane scroll model so bottom-following, history-reading, background-refresh notice handling, and `Home` / `End` / `PageUp` / `PageDown` keyboard navigation all use the same rules
 - Refresh the hidden bootstrap version again so existing agent sessions re-ingest the stricter local-audio fallback guidance on their next open/send path
 - Add an SSE-based event stream for agent/session updates so the UI now refreshes primarily on real server-side changes, while the old fixed 10-second polling loop is reduced to a low-frequency safety net
+- Rework the conversation viewport logic around a unified snapshot/restore controller so preserve-position is now the default for rerenders, media resizes, history prepends, and current-session refreshes, while follow-bottom remains an explicit mode
 
 ## [0.1.6] - 2026-03-24
 

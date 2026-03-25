@@ -27,6 +27,12 @@
 - [x] Create a new feature branch from updated `main` for the event-driven refresh implementation
 - [x] Replace the 10s agent polling loop with an event-driven update path while keeping a safe fallback
 - [x] Verify the event-driven refresh branch and update docs with the new architecture/behavior
+- [x] Investigate the new message-list bug where manually returning to bottom can snap back to an older reading position
+- [x] Fix the stale media-load anchor restore so follow-bottom wins after the user scrolls back down
+- [x] Verify the bottom-return scroll fix and record the result in docs/review notes
+- [x] Rework the conversation scroll implementation around a unified viewport controller with preserve-position as the default
+- [x] Route render, media resize, history prepend, current-session refresh, and explicit jumps through the unified viewport policy
+- [x] Verify the scroll-controller refactor and update docs with the new model/results
 
 ## Current Review
 - Verified the active repository is `claw-webchat` at `/Users/memphis/.openclaw/workspace-mira/claw-webchat`.
@@ -76,6 +82,20 @@
   loop to a 60-second fallback safety net.
 - Verification for the event-driven follow-up passed with `npm run check`, `npm run selftest`, LaunchAgent restart +
   `http://127.0.0.1:3770/healthz`, and a direct SSE smoke test that returned the `connected` event frame.
+- The latest regression report points to stale media-load anchor restoration: if a message captured a history-reading
+  anchor at render time and the user later scrolled back to bottom before the media finished loading, the delayed
+  load callback could still restore the old anchor and yank the viewport upward again.
+- The media-load pinning callback now re-evaluates follow-bottom mode at load time and ignores the old render-time
+  anchor once the user has moved since that render; this prevents late image/video/audio metadata loads from snapping
+  the viewport back to a stale reading position after the user has already returned to bottom.
+- Verification for the bottom-return scroll fix passed with `npm run check` and `npm run selftest`.
+- The next agreed follow-up is a deeper scroll-controller refactor: preserve the current viewport by default, make
+  bottom-follow an explicit state, and stop letting render-time, media-load, and refresh callbacks compete to set
+  `scrollTop` independently.
+- The scroll-controller refactor now introduces a unified viewport snapshot/restore path with revision invalidation and
+  programmatic-scroll guards, so rerenders, delayed media loads, history prepends, and current-session refreshes all
+  preserve the current viewport by default unless the user is explicitly in follow-bottom mode.
+- Verification for the unified scroll-controller follow-up passed with `npm run check` and `npm run selftest`.
 
 ## Previous Task Log
 - [x] Confirm repository path and current branch baseline
