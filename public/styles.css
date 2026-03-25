@@ -650,7 +650,36 @@ button {
 .chat-status {
   min-height: 24px;
   padding: 12px 24px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chat-status-text {
+  min-width: 0;
+  flex: 1 1 auto;
   font-size: 13px;
+}
+
+.conversation-refresh-notice {
+  flex: none;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid rgba(59, 130, 246, 0.24);
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--link-user);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.conversation-refresh-notice:hover,
+.conversation-refresh-notice:focus-visible {
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.14);
+  outline: none;
 }
 
 .history-search-shell {
@@ -2516,7 +2545,6 @@ button {
   #headerRefreshButton {
     display: none;
   }
-
   .chat-session-meta {
     max-width: 100%;
   }

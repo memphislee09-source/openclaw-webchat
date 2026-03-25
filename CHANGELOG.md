@@ -9,10 +9,14 @@ The format is intentionally lightweight and follows a simple versioned release l
 ### Fixed
 - Remove the duplicate idle-state helper copy from the `/model` picker modal so the introductory explanation is shown only once while no loading, success, or error message is active
 - Stop waiting for `thinking-options` during agent switches, so opening another conversation no longer blocks on refreshing the composer-side thinking indicator first
+- Preserve the reader's visible place when the current conversation re-renders, instead of letting background refresh jump the viewport into older history while the user is reading mid-timeline
+- Clarify the hidden media bootstrap so agents treat generated local `.mp3` / `.wav` files as normal Claw WebChat media attachments via `MEDIA:` / `mediaUrl:` fallback, instead of claiming WebChat cannot receive the file
 
 ### Changed
 - Tighten the public agent-install docs so the release-bundle and network-install paths both use explicit step-by-step checks, lower-capability-agent fallback guidance, and a final completion gate; the network guide now also covers official OpenClaw bootstrap before fetching WebChat over the network
 - Simplify the composer-side thinking control back to a static `T` button and move the current session status into the chat header, where the active model and full thinking level name are shown beside the agent title
+- Rework the conversation pane scroll model so bottom-following, history-reading, background-refresh notice handling, and `Home` / `End` / `PageUp` / `PageDown` keyboard navigation all use the same rules
+- Refresh the hidden bootstrap version again so existing agent sessions re-ingest the stricter local-audio fallback guidance on their next open/send path
 
 ## [0.1.6] - 2026-03-24
 

@@ -30,7 +30,7 @@ const HISTORY_PAGE_LIMIT_MAX = 200;
 const HISTORY_OPEN_PAGE_LIMIT = Number(process.env.OPENCLAW_WEBCHAT_OPEN_PAGE_LIMIT || 15);
 const NAMESPACE = 'openclaw-webchat';
 const LEGACY_SESSION_NAMESPACE = 'claw-webchat';
-const BOOTSTRAP_VERSION = '2026-03-24.media-v1';
+const BOOTSTRAP_VERSION = '2026-03-25.media-v2';
 const LEGACY_AVATAR_MEDIA_SECRETS = ['openclaw-webchat-local-secret'];
 const ACTIVE_RECENT_WINDOW_MS = 5 * 60 * 1000;
 const ASSISTANT_WAIT_TIMEOUT_MS = Number(process.env.OPENCLAW_WEBCHAT_ASSISTANT_WAIT_TIMEOUT_MS || 120000);
@@ -67,7 +67,9 @@ const BOOTSTRAP_TEXT = [
   '- Final reply must only contain user-visible content; never include tool logs, debug traces, reasoning, or execution narration.',
   '- For media, prefer structured attachments / media blocks when your runtime supports them.',
   '- Fallback: put each media item on its own line exactly as `MEDIA:<absolute-local-path-or-direct-http/https-media-url>` or `mediaUrl: <absolute-local-path-or-direct-http/https-media-url>`.',
-  '- Use that fallback for both local files and direct remote media URLs. Do not use `message` tool or any `webchat` channel send path.',
+  '- Use that fallback for both local files and direct remote media URLs, including generated local audio such as `.mp3` / `.wav` TTS output.',
+  '- If you already created a local media file, attach it with that fallback instead of saying Claw WebChat cannot receive the file.',
+  '- Do not use `message` tool or any `webchat` channel send path.',
   '- If this message is understood, do not reply.'
 ].join('\n');
 

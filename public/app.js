@@ -9,6 +9,9 @@ const HISTORY_SEARCH_MAX_RECENTS = 8;
 const DEFAULT_HISTORY_SEARCH_LIMIT = 50;
 const MODEL_PICKER_CACHE_TTL_MS = 15000;
 const THINKING_PICKER_CACHE_TTL_MS = 15000;
+const MESSAGE_LIST_PAGE_STEP_RATIO = 0.85;
+const MESSAGE_LIST_TOP_LOAD_THRESHOLD_PX = 64;
+const MESSAGE_LIST_BOTTOM_THRESHOLD_PX = 96;
 const SETTINGS_SECTIONS = ['contacts', 'preferences', 'access', 'about', 'manual-start'];
 const SUPPORTED_LANGUAGES = ['zh-CN', 'en'];
 const THEME_PRESETS = {
@@ -208,6 +211,8 @@ const I18N = {
       switchingThinking: '正在切换 thinking level 到 {level}…',
       thinkingSwitchDone: 'thinking level 已切换到 {level}。',
       thinkingSwitchFailed: 'thinking level 切换失败：{error}',
+      conversationUpdateReady: '当前会话有更新，按 End 或点这里查看',
+      syncingConversation: '正在同步当前会话…',
       currentModelUnavailable: '当前模型不在可用列表里。',
       timelineLongLived: '长期主时间线',
       clickToCreate: '点击后自动创建',
@@ -442,6 +447,8 @@ const I18N = {
       switchingThinking: 'Switching thinking level to {level}…',
       thinkingSwitchDone: 'Thinking level switched to {level}.',
       thinkingSwitchFailed: 'Thinking level switch failed: {error}',
+      conversationUpdateReady: 'This conversation has updates. Press End or click here to view them.',
+      syncingConversation: 'Syncing the current conversation…',
       currentModelUnavailable: 'The current model is not in the available list.',
       timelineLongLived: 'Long-lived main timeline',
       clickToCreate: 'Click to create automatically',
@@ -603,6 +610,9 @@ const state = {
   mediaViewerMoved: false,
   themeChoice: 'dark',
   autoScrollPinned: true,
+  scrollMode: 'follow-bottom',
+  pendingConversationRefresh: false,
+  pendingConversationRefreshSyncing: false,
   userProfile: {
     displayName: '我',
     avatarUrl: null
@@ -639,6 +649,7 @@ const chatTitleEl = document.getElementById('chatTitle');
 const chatSubtitleEl = document.getElementById('chatSubtitle');
 const chatSessionMetaEl = document.getElementById('chatSessionMeta');
 const chatStatusEl = document.getElementById('chatStatus');
+const conversationRefreshNoticeEl = document.getElementById('conversationRefreshNotice');
 const headerPresenceEl = document.getElementById('headerPresence');
 const historySearchShellEl = document.getElementById('historySearchShell');
 const historySearchPanelEl = document.getElementById('historySearchPanel');
@@ -776,12 +787,10 @@ function bindEvents() {
   composerInputEl.addEventListener('input', autoResizeComposer);
   thinkingButtonEl?.addEventListener('click', toggleThinkingMenu);
   thinkingMenuEl?.addEventListener('click', handleThinkingMenuClick);
-  messageListEl.addEventListener('scroll', async () => {
-    state.autoScrollPinned = isNearBottom();
-    if (messageListEl.scrollTop > 64) return;
-    if (!state.activeAgentId || !state.hasMore || state.loadingHistory) return;
-    await loadOlderHistory();
+  conversationRefreshNoticeEl?.addEventListener('click', () => {
+    void jumpToConversationEnd({ syncPendingRefresh: true });
   });
+  messageListEl.addEventListener('scroll', handleMessageListScroll);
 
   openSidebarButtonEl.addEventListener('click', () => toggleSidebar(true));
   closeSidebarButtonEl.addEventListener('click', () => toggleSidebar(false));
@@ -931,6 +940,7 @@ function renderLocalizedChrome() {
   historySearchToLabelEl.textContent = t('ui.searchDateTo');
   historySearchLimitLabelEl.textContent = t('ui.searchResultLimit');
   historySearchPanelEl?.setAttribute('aria-label', t('ui.historySearch'));
+  conversationRefreshNoticeEl?.setAttribute('title', t('status.conversationUpdateReady'));
   composerInputEl.placeholder = t('ui.composerPlaceholder');
   attachButtonEl?.setAttribute('aria-label', t('ui.attachMedia'));
   attachButtonEl?.setAttribute('title', t('ui.attachMedia'));
@@ -957,6 +967,7 @@ function renderLocalizedChrome() {
   if (modelPickerCurrentLabelEl) modelPickerCurrentLabelEl.textContent = t('ui.currentModel');
   if (closeModelPickerButtonEl) closeModelPickerButtonEl.setAttribute('aria-label', t('ui.closeModelPicker'));
   renderThinkingMenu();
+  renderConversationRefreshNotice();
   settingsButtonEl?.querySelectorAll('span')?.[1] && (settingsButtonEl.querySelectorAll('span')[1].textContent = openSettingsLabel);
   settingsPanelEl?.querySelector('.eyebrow') && (settingsPanelEl.querySelector('.eyebrow').textContent = t('ui.workspaceSettings'));
   settingsPanelEl?.querySelector('h3') && (settingsPanelEl.querySelector('h3').textContent = t('ui.settings'));
@@ -1285,6 +1296,10 @@ function lockAppForAuth() {
   state.pendingUploads = [];
   state.nextBefore = null;
   state.hasMore = false;
+  state.scrollMode = 'follow-bottom';
+  state.autoScrollPinned = true;
+  state.pendingConversationRefresh = false;
+  state.pendingConversationRefreshSyncing = false;
   clearInterval(state.pollingTimer);
   state.pollingTimer = null;
   renderAgentList({ refreshIdentity: false });
@@ -1376,7 +1391,11 @@ async function refreshAgents({ autoOpen = false, refreshCurrent = false } = {}) 
     && nextActiveAgent
     && shouldRefreshCurrentConversation(previousActiveAgent, nextActiveAgent)
   ) {
-    await openAgent(previousActive, { forceReload: true, preserveScrollBottom: true });
+    if (shouldAutoRefreshCurrentConversation()) {
+      await openAgent(previousActive, { forceReload: true, preserveScrollBottom: true });
+    } else {
+      markPendingConversationRefresh();
+    }
     return;
   }
 
@@ -1393,6 +1412,61 @@ function shouldRefreshCurrentConversation(previousAgent, nextAgent) {
   return previousAgent.lastMessageAt !== nextAgent.lastMessageAt
     || previousAgent.summary !== nextAgent.summary
     || previousAgent.presence !== nextAgent.presence;
+}
+
+function shouldAutoRefreshCurrentConversation() {
+  return state.scrollMode === 'follow-bottom' && !state.historySearchActiveMessageId;
+}
+
+function markPendingConversationRefresh() {
+  if (!state.activeAgentId) return;
+  state.pendingConversationRefresh = true;
+  renderConversationRefreshNotice();
+}
+
+function clearPendingConversationRefresh() {
+  state.pendingConversationRefresh = false;
+  state.pendingConversationRefreshSyncing = false;
+  renderConversationRefreshNotice();
+}
+
+function renderConversationRefreshNotice() {
+  if (!conversationRefreshNoticeEl) return;
+  const open = Boolean(
+    state.pendingConversationRefresh
+    && state.activeAgentId
+    && state.scrollMode !== 'follow-bottom'
+  );
+  conversationRefreshNoticeEl.hidden = !open;
+  conversationRefreshNoticeEl.classList.toggle('hidden', !open);
+  conversationRefreshNoticeEl.disabled = state.pendingConversationRefreshSyncing;
+  conversationRefreshNoticeEl.textContent = state.pendingConversationRefreshSyncing
+    ? t('status.syncingConversation')
+    : t('status.conversationUpdateReady');
+}
+
+async function flushPendingConversationRefresh({ stickToBottom = false } = {}) {
+  if (!state.pendingConversationRefresh || state.pendingConversationRefreshSyncing || !state.activeAgentId) return;
+  state.pendingConversationRefreshSyncing = true;
+  renderConversationRefreshNotice();
+  try {
+    await openAgent(state.activeAgentId, {
+      forceReload: true,
+      preserveScrollBottom: !stickToBottom
+    });
+    if (stickToBottom) {
+      state.historySearchActiveMessageId = null;
+      state.scrollMode = 'follow-bottom';
+      state.autoScrollPinned = true;
+      renderHistorySearchPanel();
+      maybeScrollMessagesToBottom(true);
+    }
+    clearPendingConversationRefresh();
+  } catch (error) {
+    state.pendingConversationRefreshSyncing = false;
+    renderConversationRefreshNotice();
+    throw error;
+  }
 }
 
 function renderAgentList({ refreshIdentity = true } = {}) {
@@ -1517,11 +1591,51 @@ function updateAgentCardIdentity(button, agent) {
   button.dataset.agentLabel = nextLabel;
 }
 
+function getMessageIdentityKey(message) {
+  if (message?.id) return `id:${message.id}`;
+  const role = String(message?.role || '');
+  const createdAt = String(message?.createdAt || '');
+  const label = String(message?.label || '');
+  const markerType = String(message?.markerType || '');
+  const blocks = Array.isArray(message?.blocks) ? JSON.stringify(message.blocks) : '';
+  return `fallback:${role}|${createdAt}|${label}|${markerType}|${blocks}`;
+}
+
+function mergeConversationMessages(existingMessages, latestMessages) {
+  const latestByKey = new Map();
+  for (const message of latestMessages || []) {
+    latestByKey.set(getMessageIdentityKey(message), message);
+  }
+
+  const out = [];
+  const seen = new Set();
+  for (const message of existingMessages || []) {
+    const key = getMessageIdentityKey(message);
+    out.push(latestByKey.get(key) || message);
+    seen.add(key);
+  }
+
+  for (const message of latestMessages || []) {
+    const key = getMessageIdentityKey(message);
+    if (seen.has(key)) continue;
+    out.push(message);
+    seen.add(key);
+  }
+
+  return out;
+}
+
 async function openAgent(agentId, { forceReload = false, preserveScrollBottom = false } = {}) {
   if (!agentId) return;
   if (state.selectedOpenPromise && state.activeAgentId === agentId && !forceReload) return state.selectedOpenPromise;
   const switchingAgent = state.activeAgentId !== agentId;
+  const previousMessages = !switchingAgent ? state.messages.slice() : [];
+  const previousNextBefore = state.nextBefore;
+  const previousHasMore = state.hasMore;
   if (state.activeAgentId !== agentId) {
+    state.scrollMode = 'follow-bottom';
+    state.autoScrollPinned = true;
+    clearPendingConversationRefresh();
     closeModelPicker({ preserveData: false });
     closeThinkingMenu({ preserveData: false });
     resetHistorySearch({ keepOpen: false });
@@ -1545,9 +1659,17 @@ async function openAgent(agentId, { forceReload = false, preserveScrollBottom = 
       void refreshThinkingButtonState({ sessionKey: response.sessionKey, silent: true });
       void refreshModelPickerState({ sessionKey: response.sessionKey, silent: true, showLoading: false });
     }
-    state.messages = Array.isArray(response.history?.messages) ? response.history.messages : [];
-    state.nextBefore = response.history?.nextBefore || null;
-    state.hasMore = Boolean(response.history?.hasMore);
+    const latestMessages = Array.isArray(response.history?.messages) ? response.history.messages : [];
+    if (!switchingAgent && preserveScrollBottom && state.scrollMode !== 'follow-bottom') {
+      state.messages = mergeConversationMessages(previousMessages, latestMessages);
+      state.nextBefore = previousNextBefore || response.history?.nextBefore || null;
+      state.hasMore = previousHasMore || Boolean(response.history?.hasMore);
+    } else {
+      state.messages = latestMessages;
+      state.nextBefore = response.history?.nextBefore || null;
+      state.hasMore = Boolean(response.history?.hasMore);
+    }
+    clearPendingConversationRefresh();
     renderMessages();
     syncComposerInteractivity();
     updateHeader();
@@ -1889,6 +2011,86 @@ async function executeHistorySearch(query) {
   }
 }
 
+function findRenderedMessageNode(messageId) {
+  if (!messageId) return null;
+  return Array.from(messageListEl.querySelectorAll('[data-message-id]'))
+    .find((element) => element.dataset.messageId === messageId) || null;
+}
+
+function captureVisibleMessageAnchor() {
+  if (!messageListEl?.children?.length) return null;
+  const listRect = messageListEl.getBoundingClientRect();
+  const topEdge = listRect.top + 8;
+  const anchorNode = Array.from(messageListEl.querySelectorAll('[data-message-id]'))
+    .find((element) => element.getBoundingClientRect().bottom > topEdge)
+    || messageListEl.querySelector('[data-message-id]');
+  if (!anchorNode?.dataset?.messageId) return null;
+  return {
+    messageId: anchorNode.dataset.messageId,
+    offsetTop: anchorNode.getBoundingClientRect().top - listRect.top
+  };
+}
+
+function restoreVisibleMessageAnchor(anchor) {
+  if (!anchor?.messageId) return false;
+  const node = findRenderedMessageNode(anchor.messageId);
+  if (!node) return false;
+  const listRect = messageListEl.getBoundingClientRect();
+  const currentOffset = node.getBoundingClientRect().top - listRect.top;
+  const delta = currentOffset - Number(anchor.offsetTop || 0);
+  if (Math.abs(delta) <= 1) return true;
+  messageListEl.scrollTop += delta;
+  return true;
+}
+
+function scheduleVisibleMessageAnchorRestore(anchor) {
+  if (!anchor) return;
+  requestAnimationFrame(() => {
+    if (!restoreVisibleMessageAnchor(anchor)) return;
+    requestAnimationFrame(() => restoreVisibleMessageAnchor(anchor));
+  });
+}
+
+function shouldPreserveConversationAnchorOnRender() {
+  return state.scrollMode === 'reading-history';
+}
+
+function syncConversationScrollModeFromViewport() {
+  const nearBottom = isNearBottom();
+  state.autoScrollPinned = nearBottom;
+  if (nearBottom) {
+    if (state.scrollMode !== 'explicit-jump') {
+      state.scrollMode = 'follow-bottom';
+    }
+    if (state.pendingConversationRefresh && !state.pendingConversationRefreshSyncing) {
+      void flushPendingConversationRefresh({ stickToBottom: true });
+    }
+  } else if (state.scrollMode !== 'explicit-jump') {
+    state.scrollMode = 'reading-history';
+  }
+  renderConversationRefreshNotice();
+}
+
+async function handleMessageListScroll() {
+  syncConversationScrollModeFromViewport();
+  if (messageListEl.scrollTop > MESSAGE_LIST_TOP_LOAD_THRESHOLD_PX) return;
+  if (!state.activeAgentId || !state.hasMore || state.loadingHistory) return;
+  await loadOlderHistory();
+}
+
+function clearHistorySearchTarget({ rerender = true } = {}) {
+  if (!state.historySearchActiveMessageId) return;
+  state.historySearchActiveMessageId = null;
+  renderHistorySearchPanel();
+  if (rerender) {
+    renderMessages();
+  }
+}
+
+function shouldKeepReadingPosition() {
+  return state.scrollMode === 'reading-history';
+}
+
 async function jumpToHistorySearchResult(messageId) {
   if (!messageId || !state.activeAgentId) return;
   showStatus(t('status.locatingHit'), 'info');
@@ -1900,12 +2102,17 @@ async function jumpToHistorySearchResult(messageId) {
   }
 
   state.autoScrollPinned = false;
+  state.scrollMode = 'explicit-jump';
   state.historySearchActiveMessageId = messageId;
   renderHistorySearchPanel();
   renderMessages();
   requestAnimationFrame(() => {
     scrollToHistoryMessage(messageId);
-    requestAnimationFrame(() => scrollToHistoryMessage(messageId));
+    requestAnimationFrame(() => {
+      scrollToHistoryMessage(messageId);
+      state.scrollMode = 'reading-history';
+      renderConversationRefreshNotice();
+    });
   });
   showStatus(t('status.locateSuccess'), 'success');
 }
@@ -1930,14 +2137,14 @@ async function ensureHistoryMessageLoaded(messageId) {
 }
 
 function scrollToHistoryMessage(messageId) {
-  const node = Array.from(messageListEl.querySelectorAll('[data-message-id]'))
-    .find((element) => element.dataset.messageId === messageId);
+  const node = findRenderedMessageNode(messageId);
   if (!node) return;
   node.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
-function renderMessages() {
+function renderMessages({ preserveAnchor = true } = {}) {
   const shouldStickToBottom = shouldKeepConversationPinnedAfterRender();
+  const anchor = preserveAnchor && shouldPreserveConversationAnchorOnRender() ? captureVisibleMessageAnchor() : null;
   messageListEl.classList.toggle('showing-history-target', Boolean(state.historySearchActiveMessageId));
   messageListEl.innerHTML = '';
 
@@ -2030,6 +2237,8 @@ function renderMessages() {
 
   if (shouldStickToBottom) {
     scheduleConversationPinnedBottomSync();
+  } else if (anchor) {
+    scheduleVisibleMessageAnchorRestore(anchor);
   }
 }
 
@@ -2431,7 +2640,7 @@ async function loadOlderHistory() {
     state.messages = [...incoming, ...state.messages];
     state.nextBefore = data.nextBefore || null;
     state.hasMore = Boolean(data.hasMore);
-    renderMessages();
+    renderMessages({ preserveAnchor: false });
     const nextHeight = messageListEl.scrollHeight;
     messageListEl.scrollTop = Math.max(0, previousTop + (nextHeight - previousHeight));
   } finally {
@@ -2492,6 +2701,7 @@ async function handleSendSubmit(event) {
     createdAt: new Date().toISOString(),
     blocks: buildOptimisticBlocks(text, state.pendingUploads)
   };
+  const keepReadingPosition = shouldKeepReadingPosition();
   const draftText = text;
   const draftAttachments = state.pendingUploads;
   state.messages.push(optimistic);
@@ -2501,7 +2711,9 @@ async function handleSendSubmit(event) {
   renderPendingUploads();
   autoResizeComposer();
   renderMessages();
-  maybeScrollMessagesToBottom(true);
+  if (!keepReadingPosition) {
+    maybeScrollMessagesToBottom(true);
+  }
 
   try {
     const response = await apiPost(`/api/openclaw-webchat/sessions/${encodeURIComponent(targetSessionKey)}/send`, {
@@ -2512,7 +2724,9 @@ async function handleSendSubmit(event) {
     releasePendingUploads(draftAttachments);
     if (isOperationContextActive(context)) {
       renderMessages();
-      maybeScrollMessagesToBottom();
+      if (!keepReadingPosition) {
+        maybeScrollMessagesToBottom();
+      }
     }
     showContextStatus(context, response?.aborted ? t('status.replyStopped') : t('status.sendDone'), 'success');
     await refreshAgents({ autoOpen: false });
@@ -2531,7 +2745,9 @@ async function handleSendSubmit(event) {
     endSessionActivity(targetSessionKey);
     if (isOperationContextActive(context)) {
       renderMessages();
-      maybeScrollMessagesToBottom();
+      if (!keepReadingPosition) {
+        maybeScrollMessagesToBottom();
+      }
     }
   }
 }
@@ -2866,6 +3082,10 @@ function updateHeader() {
   renderHeaderSessionMeta();
   headerPresenceEl.className = `presence-dot ${normalizePresence(active?.presence || 'idle')}`;
   if (!active) {
+    state.scrollMode = 'follow-bottom';
+    state.autoScrollPinned = true;
+    state.pendingConversationRefresh = false;
+    state.pendingConversationRefreshSyncing = false;
     if (state.thinkingPickerOpen) {
       closeThinkingMenu({ preserveData: false });
     }
@@ -2877,6 +3097,7 @@ function updateHeader() {
     state.historySearchShowingRecents = false;
   }
   renderHistorySearchPanel();
+  renderConversationRefreshNotice();
 }
 
 function normalizeModelOption(option) {
@@ -4058,6 +4279,88 @@ function handleWindowKeydown(event) {
     }
     closeCommandMenu();
   }
+
+  if (shouldHandleConversationNavigationKey(event)) {
+    event.preventDefault();
+    void handleConversationNavigationKey(event);
+  }
+}
+
+function shouldHandleConversationNavigationKey(event) {
+  if (!['Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) return false;
+  if (!state.activeSessionKey || !messageListEl) return false;
+  if (state.mediaViewerOpen || state.settingsOpen || state.modelPickerOpen || state.thinkingPickerOpen) return false;
+
+  const activeElement = document.activeElement;
+  if (activeElement instanceof HTMLElement) {
+    if (activeElement.isContentEditable) return false;
+    if (activeElement.closest('input, textarea, select, button, a, [contenteditable="true"]')) return false;
+  }
+
+  return true;
+}
+
+async function handleConversationNavigationKey(event) {
+  if (event.key === 'End') {
+    await jumpToConversationEnd({ syncPendingRefresh: true });
+    return;
+  }
+
+  if (event.key === 'Home') {
+    await jumpToConversationHome();
+    return;
+  }
+
+  if (event.key === 'PageUp') {
+    await pageConversation(-1);
+    return;
+  }
+
+  if (event.key === 'PageDown') {
+    pageConversation(1);
+  }
+}
+
+async function jumpToConversationHome() {
+  clearHistorySearchTarget();
+  state.scrollMode = 'reading-history';
+  state.autoScrollPinned = false;
+  renderConversationRefreshNotice();
+  messageListEl.scrollTo({ top: 0, behavior: 'auto' });
+  if (state.hasMore && !state.loadingHistory) {
+    await loadOlderHistory();
+    messageListEl.scrollTo({ top: 0, behavior: 'auto' });
+  }
+}
+
+async function jumpToConversationEnd({ syncPendingRefresh = false } = {}) {
+  clearHistorySearchTarget();
+  if (syncPendingRefresh && state.pendingConversationRefresh) {
+    await flushPendingConversationRefresh({ stickToBottom: true });
+    return;
+  }
+  state.scrollMode = 'follow-bottom';
+  state.autoScrollPinned = true;
+  renderConversationRefreshNotice();
+  maybeScrollMessagesToBottom(true);
+}
+
+async function pageConversation(direction) {
+  clearHistorySearchTarget();
+  const pageStep = Math.max(120, Math.round(messageListEl.clientHeight * MESSAGE_LIST_PAGE_STEP_RATIO));
+  if (direction < 0) {
+    state.scrollMode = 'reading-history';
+    state.autoScrollPinned = false;
+    messageListEl.scrollBy({ top: -pageStep, behavior: 'auto' });
+    if (messageListEl.scrollTop <= MESSAGE_LIST_TOP_LOAD_THRESHOLD_PX && state.hasMore && !state.loadingHistory) {
+      await loadOlderHistory();
+    }
+    renderConversationRefreshNotice();
+    return;
+  }
+
+  messageListEl.scrollBy({ top: pageStep, behavior: 'auto' });
+  syncConversationScrollModeFromViewport();
 }
 
 function detectAttachmentKind(file) {
@@ -4600,7 +4903,7 @@ function maybeScrollMessagesToBottom(force = false) {
 
 function shouldKeepConversationPinnedAfterRender() {
   if (state.historySearchActiveMessageId) return false;
-  return state.autoScrollPinned;
+  return state.scrollMode === 'follow-bottom' && state.autoScrollPinned;
 }
 
 function scheduleConversationPinnedBottomSync() {
@@ -4615,16 +4918,22 @@ function scheduleConversationPinnedBottomSync() {
 }
 
 function keepMessagesPinnedOnMediaLoad(element, eventName) {
-  const shouldStickToBottom = state.autoScrollPinned || isNearBottom();
+  const anchor = shouldPreserveConversationAnchorOnRender() ? captureVisibleMessageAnchor() : null;
+  const shouldStickToBottom = state.scrollMode === 'follow-bottom' && (state.autoScrollPinned || isNearBottom());
   element.addEventListener(eventName, () => {
-    if (!shouldStickToBottom && !state.autoScrollPinned && !isNearBottom()) return;
-    maybeScrollMessagesToBottom();
+    if (shouldStickToBottom) {
+      maybeScrollMessagesToBottom();
+      return;
+    }
+    if (anchor) {
+      scheduleVisibleMessageAnchorRestore(anchor);
+    }
   }, { once: true });
 }
 
 function isNearBottom() {
   const remaining = messageListEl.scrollHeight - messageListEl.clientHeight - messageListEl.scrollTop;
-  return remaining < 96;
+  return remaining < MESSAGE_LIST_BOTTOM_THRESHOLD_PX;
 }
 
 function autoResizeComposer() {

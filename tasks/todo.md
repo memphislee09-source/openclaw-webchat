@@ -12,6 +12,21 @@
 - [x] Verify the UI changes with project checks
 - [x] Update project docs for the thinking-button/header follow-up
 - [x] Sync the follow-up to GitHub
+- [x] Investigate why the current conversation can suddenly jump to several-days-old history while reading Wangyuyan news
+- [x] Explain the root cause before making any fix
+- [x] Rework the conversation pane scroll model around pinned-bottom vs history-reading states
+- [x] Preserve the visible anchor during current-conversation refresh and re-render
+- [x] Add keyboard support for `Home`, `End`, `PageUp`, and `PageDown` in the message list
+- [x] Verify the conversation-pane follow-up and update docs
+- [x] Investigate why Wangyuyan reports that mp3 files cannot be sent back in Claw WebChat
+- [x] Fix the mp3 return path if the issue is in WebChat's media protocol or rendering
+- [x] Tighten the hidden media bootstrap so local audio/mp3 outputs are explicitly sent back via `MEDIA:` / `mediaUrl:`
+- [x] Refresh existing sessions onto the new bootstrap contract and add regression coverage for audio fallback guidance
+- [x] Verify the mp3 send-path fix and record the result in docs/review notes
+- [ ] Sync the current mainline fixes/docs to GitHub before starting the event-driven refresh follow-up
+- [ ] Create a new feature branch from updated `main` for the event-driven refresh implementation
+- [ ] Replace the 10s agent polling loop with an event-driven update path while keeping a safe fallback
+- [ ] Verify the event-driven refresh branch and update docs with the new architecture/behavior
 
 ## Current Review
 - Verified the active repository is `claw-webchat` at `/Users/memphis/.openclaw/workspace-mira/claw-webchat`.
@@ -34,6 +49,26 @@
 - The header-side thinking state now uses the full level name (for example `off`, `minimal`, `medium`)
   instead of the abbreviated `T:*` label form.
 - Verification passed for this UI follow-up with `npm run check` and `npm run selftest`.
+- Root cause of the Wangyuyan history jump was confirmed before the fix: background polling could reopen the
+  current conversation after agent summary/presence changes, but that reload path only knew how to preserve
+  pinned-bottom behavior and did not preserve the user's non-bottom reading position.
+- The conversation pane now distinguishes bottom-following vs history-reading states, keeps a visible-message
+  anchor across current-conversation re-renders, defers background conversation refresh into an explicit
+  notice while the user is reading history, and adds `Home` / `End` / `PageUp` / `PageDown` navigation.
+- Verification for the conversation-pane follow-up passed with `npm run check` and `npm run selftest`.
+- Wangyuyan mp3 send regression is not caused by frontend audio rendering: history already contains a prior successful
+  mp3 attachment reply, and both the server and `public/message-blocks.js` still classify `.mp3` as `audio`.
+- The latest Wangyuyan reply instead shows an agent-compliance failure: it generated a local mp3 file path but claimed
+  WebChat could not receive it, which points back to the hidden media fallback contract not being explicit enough for
+  locally generated audio outputs such as TTS results.
+- The hidden bootstrap now explicitly names generated local `.mp3` / `.wav` output and tells agents to return it with
+  `MEDIA:` / `mediaUrl:` instead of claiming Claw WebChat cannot receive the file; `BOOTSTRAP_VERSION` was bumped so
+  existing sessions will re-ingest that stricter rule on their next open/send path.
+- Verification passed for the mp3 follow-up with `npm run check` and `npm run selftest`.
+- The local LaunchAgent service was restarted successfully and `http://127.0.0.1:3770/healthz` returned `{ "ok": true }`;
+  Wangyuyan's binding remains on the older bootstrap until the next user turn triggers reinjection.
+- The next requested follow-up is to first sync the current mainline state to GitHub, then branch off and implement
+  an event-driven refresh path in place of the fixed 10-second polling model.
 
 ## Previous Task Log
 - [x] Confirm repository path and current branch baseline

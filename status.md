@@ -56,9 +56,10 @@
   - session 级停止接口已接入 gateway `chat.abort`，并同步拦截本地等待态与迟到补回链路
   - 图片查看器右上角缩放读数会跟随真实缩放比例动态刷新，不再固定显示 `1:1`
   - 前端与公开展示文档中的项目名已统一改为 `Claw WebChat`；API、环境变量、namespace 和仓库名保持不变
-  - 隐藏 bootstrap 媒体约定已收紧并压缩：agent 默认会把本地媒体和直链远程 `http/https` 媒体按 `MEDIA:` / `mediaUrl:` 回传到 Claw WebChat，不再误走不受支持的 `message` / `webchat` 发送路径
+  - 隐藏 bootstrap 媒体约定已继续收紧并压缩：agent 默认会把本地媒体和直链远程 `http/https` 媒体按 `MEDIA:` / `mediaUrl:` 回传到 Claw WebChat，不再误走不受支持的 `message` / `webchat` 发送路径；本地生成的 `.mp3` / `.wav` TTS 音频也已明确纳入同一回退协议
   - 常规桌面图片 / 视频消息默认宽度上限已从 `420px` 调整为 `70vw`，同时保留原有图文混排等宽气泡判定逻辑
   - 右侧消息区滚动已补稳：历史补页保持原可见区，agent 处理中不再强制把用户拉回底部，消息列表改为直接滚动避免动画叠加乱跳
+  - 对话栏滚动模型已进一步收口：中段阅读时后台刷新不再直接重开并打断当前视口，而是先显示“当前会话有更新，按 End 或点这里查看”；当前会话重渲染会保住可见消息锚点，并已补 `Home` / `End` / `PageUp` / `PageDown` 键盘导航
   - 设置面板“关于”已显示当前版本号，直接由 `package.json` 经设置接口返回；thinking 按钮字重也已收轻，避免视觉上压过主发送动作
   - 已补公开发布资料第一套：README 首页重写、公开发布 checklist、GitHub issue/PR 模板增强、截图归档与两套 agent 安装指南
   - 已新增 release bundle 打包脚本，可生成 GitHub Release 用的整合安装包与 SHA256 校验文件
@@ -99,6 +100,7 @@
 - 隐藏 bootstrap 已明确约定本地文件与远程直链媒体的回传格式，agent 在 Claw WebChat 中无需额外提醒即可按 `MEDIA:` / `mediaUrl:` 正确发送
 - 常规桌面媒体默认上限已提升到 `70vw`
 - 右侧消息区历史补页与手动滚动已补稳，不再因 busy 贴底或平滑滚动叠加而频繁乱跳
+- 当前会话在中段阅读时会延后后台刷新，并在重渲染时保住可见消息锚点；消息列表已支持 `Home` / `End` / `PageUp` / `PageDown`
 
 ## 关键文件
 - `src/server.js`：服务端适配层、历史存储、媒体代理、设置接口、slash 命令
@@ -112,6 +114,7 @@
 - `main` 已补公开安装文档完整性收口：bundle / network 两套 agent 安装说明现在都强调逐步校验、低能力模型 fallback 和最终完成门槛；network 流程也补上了 OpenClaw 官方 bootstrap + onboard 再继续下载 WebChat 的闭环
 - `main` 已补一个 `0.1.6` 后续小修：`/model` 弹窗空闲态不再在顶部说明之外重复显示第二份相同介绍文案
 - `main` 已补一个 `0.1.6` 后续小修：agent 切换时不再等待 thinking 状态请求才打开会话；输入区右侧 thinking 控件回到静态 `T` 图标，当前模型与完整 thinking level 改为显示在聊天头部标题旁
+- `main` 已补一个 `0.1.6` 后续小修：对话栏现在区分“贴底跟随”和“中段阅读”，后台轮询发现当前会话更新时会先显示提示而不是直接打断阅读；同时消息列表已支持 `Home` / `End` / `PageUp` / `PageDown`
 - `0.1.6` 已收口准备同步：`/model` 完整列表与响应速度修复、模型弹窗滚动/停留交互收口，以及 `T:*` thinking 菜单的同级提速与停留确认交互都已纳入当前版本
 - `0.1.5` 已同步到 GitHub：历史搜索第二阶段首批增强、agent 级 `/model` 切换、发送/停止双态按钮、`chat.abort` 停止链路、公开发布文档与图片查看器缩放读数修复均已纳入当前版本
 - `f27a1d4` `feat: add theme preset variants`
@@ -135,6 +138,8 @@
 - 2026-03-24 已修复 Athena 发图时误走 `message` 工具的问题：隐藏 bootstrap 现在更短但更明确，agent 默认知道用 `MEDIA:` / `mediaUrl:` 回传本地媒体与远程直链媒体
 - 2026-03-24 常规桌面媒体默认上限调整为 `70vw`，以及右侧消息区滚动乱跳修复，现已并入 `main`，后续继续以当前主线为开发基点
 - 2026-03-25 已将输入区右侧 thinking 控件收回为静态 `T` 图标，避免切换 agent 时等待 thinking 标签刷新；当前 session 的模型与完整 thinking level 已改为显示在聊天头部 agent 名称右侧
+- 2026-03-25 已重做对话栏滚动模型：阅读历史时后台刷新不再直接把视口打断到旧消息位置；当前会话重渲染会保住可见锚点，并新增 `Home` / `End` / `PageUp` / `PageDown` 键盘支持
+- 2026-03-25 已补 Wangyuyan mp3 回传协议收口：隐藏 bootstrap 现在明确要求把已生成的本地 `.mp3` / `.wav` 音频直接按 `MEDIA:` / `mediaUrl:` 返回，而不是声称 Claw WebChat 不能接收该文件；bootstrap 版本也已提升以强制现有 session 重新注入
 - 2026-03-24 已补设置面板“关于”版本号显示，并把 thinking 按钮字重收轻，保证它作为工具控件不抢主发送动作
 - 2026-03-22 已完成历史搜索第二阶段首批增强：日期筛选、更大结果集、分词/紧凑匹配排序与结果高亮
 - 2026-03-22 已修复 gateway CLI stdout 被插件诊断日志污染时导致 `/model` / `/think` 失败的问题

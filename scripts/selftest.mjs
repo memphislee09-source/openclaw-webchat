@@ -126,7 +126,10 @@ async function checkPageShell() {
   assert(appJs.includes('groupMessageBlocksForRender'), 'app.js should include shared block render grouping');
   assert(appJs.includes('const previousTop = messageListEl.scrollTop;'), 'app.js should preserve pre-load scroll offset when prepending history');
   assert(appJs.includes('previousTop + (nextHeight - previousHeight)'), 'app.js should restore scroll position relative to prepended history height');
-  assert(appJs.includes('return state.autoScrollPinned;'), 'app.js should not force bottom stickiness solely because the active session is busy');
+  assert(appJs.includes("return state.scrollMode === 'follow-bottom' && state.autoScrollPinned;"), 'app.js should gate bottom stickiness through the explicit follow-bottom scroll mode');
+  assert(appJs.includes('function captureVisibleMessageAnchor()'), 'app.js should include a visible-message anchor capture helper');
+  assert(appJs.includes('async function handleConversationNavigationKey(event)'), 'app.js should include keyboard navigation handling for the conversation pane');
+  assert(appJs.includes("conversationRefreshNoticeEl.textContent = state.pendingConversationRefreshSyncing"), 'app.js should render a dedicated pending-refresh notice for history readers');
   assert(appJs.includes("const settingsVersionValueEl = document.getElementById('settingsVersionValue');"), 'app.js should bind the About settings version element');
   assert(appJs.includes("settingsVersionValueEl.textContent = state.projectInfo.version || '0.1.5';"), 'app.js should render the current project version in About settings');
   assert(css.includes('.agent-card'), 'styles.css should include agent-card styles');
@@ -176,14 +179,15 @@ async function checkPageShell() {
 async function checkBootstrapContract() {
   const serverJs = fs.readFileSync(defaultServerFile, 'utf8');
   const appJs = fs.readFileSync(defaultAppFile, 'utf8');
-  assert(serverJs.includes("const BOOTSTRAP_VERSION = '2026-03-24.media-v1';"), 'server bootstrap version should reflect the media guidance refresh');
+  assert(serverJs.includes("const BOOTSTRAP_VERSION = '2026-03-25.media-v2';"), 'server bootstrap version should reflect the latest media guidance refresh');
   assert(serverJs.includes('const MODEL_CATALOG_CACHE_TTL_MS = Number(process.env.OPENCLAW_WEBCHAT_MODEL_CATALOG_CACHE_TTL_MS || 30000);'), 'server should cache gateway model catalogs briefly');
   assert(serverJs.includes('const SESSION_STATE_CACHE_TTL_MS = Number(process.env.OPENCLAW_WEBCHAT_SESSION_STATE_CACHE_TTL_MS || 2500);'), 'server should cache gateway session state briefly');
   assert(serverJs.includes('function summarizeModelCatalog(models) {'), 'server should summarize the model catalog by provider for slash output');
   assert(appJs.includes('const THINKING_PICKER_CACHE_TTL_MS = 15000;'), 'app should cache thinking picker payloads briefly for warm reopen');
   assert(appJs.includes("state.thinkingPickerNotice = t('status.thinkingSwitchDone'"), 'thinking picker should keep a visible success notice after switching');
   assert(serverJs.includes('You are replying inside Claw WebChat.'), 'bootstrap should target Claw WebChat explicitly');
-  assert(serverJs.includes('Use that fallback for both local files and direct remote media URLs.'), 'bootstrap should explain local and remote fallback media handling');
+  assert(serverJs.includes('Use that fallback for both local files and direct remote media URLs, including generated local audio such as `.mp3` / `.wav` TTS output.'), 'bootstrap should explicitly include local generated audio fallback guidance');
+  assert(serverJs.includes('If you already created a local media file, attach it with that fallback instead of saying Claw WebChat cannot receive the file.'), 'bootstrap should steer agents away from refusing already-generated local media');
   assert(serverJs.includes("Do not use `message` tool or any `webchat` channel send path."), 'bootstrap should forbid unsupported webchat message-tool media sending');
 }
 
@@ -224,6 +228,8 @@ async function checkMixedMediaParsing() {
   const directiveBlocks = parseTextIntoBlocks([
     '本地图片如下',
     'MEDIA:/tmp/example.png',
+    '本地音频如下',
+    'MEDIA:/tmp/example.mp3',
     '远程视频如下',
     'mediaUrl: https://example.com/demo.mp4'
   ].join('\n'));
@@ -231,10 +237,12 @@ async function checkMixedMediaParsing() {
   const expectedDirectiveSummary = [
     'text:本地图片如下',
     'image:/tmp/example.png',
+    'text:本地音频如下',
+    'audio:/tmp/example.mp3',
     'text:远程视频如下',
     'video:https://example.com/demo.mp4'
   ];
-  assert(JSON.stringify(directiveSummary) === JSON.stringify(expectedDirectiveSummary), 'MEDIA/mediaUrl directives should support both local paths and direct remote media urls');
+  assert(JSON.stringify(directiveSummary) === JSON.stringify(expectedDirectiveSummary), 'MEDIA/mediaUrl directives should support local images, local audio, and direct remote media urls');
 }
 
 async function checkSettings() {
