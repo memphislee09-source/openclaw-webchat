@@ -45,6 +45,8 @@
 - [x] Bump the project version for the missing-reply fix follow-up
 - [x] Update changelog/status/handoff/README notes to reflect the `0.1.7` branch state and verification result
 - [x] Verify the version/doc follow-up, then commit and push `codex/sse-event-refresh` to GitHub
+- [x] Merge `codex/sse-event-refresh` into `main`
+- [x] Verify merged `main`, update baseline notes, and push the new mainline commit to GitHub
 
 ## Current Review
 - Verified the active repository is `claw-webchat` at `/Users/memphis/.openclaw/workspace-mira/claw-webchat`.
@@ -169,6 +171,13 @@
     distinguish the current branch version `0.1.7` from the latest published GitHub Release bundle `0.1.6`.
   - Version/doc follow-up verification passed with `npm run check`, `npm run selftest`, and a live
     `GET /api/openclaw-webchat/settings -> .projectInfo.version == 0.1.7` check after LaunchAgent restart.
+- Mainline baseline follow-up:
+  - `codex/sse-event-refresh` has now been merged into `main`, so future work should use `main` as the baseline for the
+    SSE refresh path, unified viewport controller, and missing-reply reconciliation fixes.
+  - `status.md` and `docs/HANDOFF-2026-03-24.md` have been adjusted so these capabilities are described as part of the
+    mainline baseline instead of as branch-only follow-ups.
+  - Merged-main verification passed with `npm run check`, `npm run selftest`, `curl -sf http://127.0.0.1:3770/healthz`,
+    and `GET /api/openclaw-webchat/settings -> .projectInfo.version == 0.1.7` after restarting the LaunchAgent.
 
 ## Previous Task Log
 - [x] Confirm repository path and current branch baseline

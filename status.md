@@ -142,10 +142,10 @@
 - 2026-03-25 已将输入区右侧 thinking 控件收回为静态 `T` 图标，避免切换 agent 时等待 thinking 标签刷新；当前 session 的模型与完整 thinking level 已改为显示在聊天头部 agent 名称右侧
 - 2026-03-25 已重做对话栏滚动模型：阅读历史时后台刷新不再直接把视口打断到旧消息位置；当前会话重渲染会保住可见锚点，并新增 `Home` / `End` / `PageUp` / `PageDown` 键盘支持
 - 2026-03-25 已补 Wangyuyan mp3 回传协议收口：隐藏 bootstrap 现在明确要求把已生成的本地 `.mp3` / `.wav` 音频直接按 `MEDIA:` / `mediaUrl:` 返回，而不是声称 Claw WebChat 不能接收该文件；bootstrap 版本也已提升以强制现有 session 重新注入
-- 2026-03-25 已在 `codex/sse-event-refresh` 上实现事件驱动刷新第一版：服务端会把 binding/history 变化通过 SSE 推给前端，前端优先按事件刷新 agent 列表与当前会话，固定轮询从 10 秒降为 60 秒兜底
-- 2026-03-25 已在 `codex/sse-event-refresh` 上继续重构对话栏滚动模型：引入统一 viewport revision + snapshot/restore 控制器，过期异步回调不会再拿旧锚点回拉视口，当前实现默认优先保持当前位置
-- 2026-03-26 已在 `codex/sse-event-refresh` 上补缺消息收口：assistant 最终回复判定不再把带 `toolCall` 的进度消息误收为最终答案；会话打开时会对当前 upstream session 做 history reconcile，把已存在 upstream、但本地 JSONL 漏掉的 user / assistant 行回补回来
-- 2026-03-26 当前工作分支版本已提升到 `0.1.7`；公开 GitHub Release bundle 仍停留在 `0.1.6`
+- 2026-03-25 已把事件驱动刷新第一版并入 `main`：服务端会把 binding/history 变化通过 SSE 推给前端，前端优先按事件刷新 agent 列表与当前会话，固定轮询从 10 秒降为 60 秒兜底
+- 2026-03-25 已把对话栏统一 viewport 控制器并入 `main`：引入 viewport revision + snapshot/restore 控制器，过期异步回调不会再拿旧锚点回拉视口，当前实现默认优先保持当前位置
+- 2026-03-26 已把缺消息收口并入 `main`：assistant 最终回复判定不再把带 `toolCall` 的进度消息误收为最终答案；会话打开时会对当前 upstream session 做 history reconcile，把已存在 upstream、但本地 JSONL 漏掉的 user / assistant 行回补回来
+- 2026-03-26 `main` 当前代码基线已提升到 `0.1.7`；公开 GitHub Release bundle 仍停留在 `0.1.6`
 - 2026-03-24 已补设置面板“关于”版本号显示，并把 thinking 按钮字重收轻，保证它作为工具控件不抢主发送动作
 - 2026-03-22 已完成历史搜索第二阶段首批增强：日期筛选、更大结果集、分词/紧凑匹配排序与结果高亮
 - 2026-03-22 已修复 gateway CLI stdout 被插件诊断日志污染时导致 `/model` / `/think` 失败的问题
