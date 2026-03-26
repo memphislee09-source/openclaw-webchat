@@ -7,7 +7,7 @@
 
 ## 项目概览
 - 项目名：`claw-webchat`
-- 当前版本：`0.1.6`（manifest: `0.1.6`）
+- 当前版本：`0.1.7`（manifest: `0.1.7`）
 - 当前主线：`main`
 - 仓库地址：`https://github.com/memphislee09-source/claw-webchat`
 - 项目目标：构建独立于默认 WebUI 的 OpenClaw WebChat，强化历史保留、富媒体体验和多会话稳定性
@@ -49,6 +49,8 @@
   - gateway CLI stdout 混合日志兼容解析，插件诊断日志不会再打断 `/model`、`/think` 等本地 slash 命令
   - `/model` 已支持当前 agent 级模型切换弹窗：显示当前模型与可用模型列表，并可直接切换到 `provider/model` 目标
   - 输入区右侧保留静态 `T` thinking 控件；当前 session 的模型与完整 thinking level 会显示在聊天头部 agent 名称右侧，点击 `T` 后仍可弹出当前模型可用的 thinking 选项并直接切换
+  - 前端已接入 `/api/openclaw-webchat/events` SSE 事件流：agent 列表与当前会话现在优先根据服务端真实变化触发刷新，固定轮询已降为低频兜底而非主同步机制
+  - 对话栏滚动控制已进一步统一：render、媒体延迟加载、历史补页、当前会话刷新与显式跳转现在共用一套 viewport snapshot / restore 逻辑，默认优先保持当前位置，只有显式 follow-bottom 时才自动贴底
   - 对话区头像尺寸已与左栏头像统一，不再因消息区布局出现大小漂移
   - 用户发送后在 agent 处理中阶段保持对话贴底，不再短暂下沉回上一条可见消息
   - 视频消息在未播放前会显示缩略预览层，至少可见首帧或视频标题/播放提示
@@ -140,6 +142,10 @@
 - 2026-03-25 已将输入区右侧 thinking 控件收回为静态 `T` 图标，避免切换 agent 时等待 thinking 标签刷新；当前 session 的模型与完整 thinking level 已改为显示在聊天头部 agent 名称右侧
 - 2026-03-25 已重做对话栏滚动模型：阅读历史时后台刷新不再直接把视口打断到旧消息位置；当前会话重渲染会保住可见锚点，并新增 `Home` / `End` / `PageUp` / `PageDown` 键盘支持
 - 2026-03-25 已补 Wangyuyan mp3 回传协议收口：隐藏 bootstrap 现在明确要求把已生成的本地 `.mp3` / `.wav` 音频直接按 `MEDIA:` / `mediaUrl:` 返回，而不是声称 Claw WebChat 不能接收该文件；bootstrap 版本也已提升以强制现有 session 重新注入
+- 2026-03-25 已在 `codex/sse-event-refresh` 上实现事件驱动刷新第一版：服务端会把 binding/history 变化通过 SSE 推给前端，前端优先按事件刷新 agent 列表与当前会话，固定轮询从 10 秒降为 60 秒兜底
+- 2026-03-25 已在 `codex/sse-event-refresh` 上继续重构对话栏滚动模型：引入统一 viewport revision + snapshot/restore 控制器，过期异步回调不会再拿旧锚点回拉视口，当前实现默认优先保持当前位置
+- 2026-03-26 已在 `codex/sse-event-refresh` 上补缺消息收口：assistant 最终回复判定不再把带 `toolCall` 的进度消息误收为最终答案；会话打开时会对当前 upstream session 做 history reconcile，把已存在 upstream、但本地 JSONL 漏掉的 user / assistant 行回补回来
+- 2026-03-26 当前工作分支版本已提升到 `0.1.7`；公开 GitHub Release bundle 仍停留在 `0.1.6`
 - 2026-03-24 已补设置面板“关于”版本号显示，并把 thinking 按钮字重收轻，保证它作为工具控件不抢主发送动作
 - 2026-03-22 已完成历史搜索第二阶段首批增强：日期筛选、更大结果集、分词/紧凑匹配排序与结果高亮
 - 2026-03-22 已修复 gateway CLI stdout 被插件诊断日志污染时导致 `/model` / `/think` 失败的问题

@@ -28,6 +28,8 @@ const HISTORY_DIR = path.join(DATA_DIR, 'history');
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 const HISTORY_PAGE_LIMIT_MAX = 200;
 const HISTORY_OPEN_PAGE_LIMIT = Number(process.env.OPENCLAW_WEBCHAT_OPEN_PAGE_LIMIT || 15);
+const HISTORY_RECONCILE_FETCH_LIMIT = Number(process.env.OPENCLAW_WEBCHAT_HISTORY_RECONCILE_LIMIT || 200);
+const HISTORY_RECONCILE_USER_MATCH_WINDOW_MS = Number(process.env.OPENCLAW_WEBCHAT_HISTORY_RECONCILE_USER_MATCH_WINDOW_MS || 2 * 60 * 1000);
 const NAMESPACE = 'openclaw-webchat';
 const LEGACY_SESSION_NAMESPACE = 'claw-webchat';
 const BOOTSTRAP_VERSION = '2026-03-25.media-v2';
@@ -47,10 +49,12 @@ const MODEL_CATALOG_CACHE_TTL_MS = Number(process.env.OPENCLAW_WEBCHAT_MODEL_CAT
 const SESSION_STATE_CACHE_TTL_MS = Number(process.env.OPENCLAW_WEBCHAT_SESSION_STATE_CACHE_TTL_MS || 2500);
 const PROJECT_GITHUB_URL = normalizeOptionalString(process.env.OPENCLAW_WEBCHAT_GITHUB_URL)
   || 'https://github.com/memphislee09-source/claw-webchat';
-const PROJECT_VERSION = normalizeOptionalString(PACKAGE_JSON?.version) || '0.1.6';
+const PROJECT_VERSION = normalizeOptionalString(PACKAGE_JSON?.version) || '0.1.7';
 const RESTART_LABEL = normalizeOptionalString(process.env.OPENCLAW_WEBCHAT_LAUNCHD_LABEL)
   || normalizeOptionalString(process.env.XPC_SERVICE_NAME)
   || 'ai.openclaw.webchat';
+const EVENT_STREAM_RETRY_MS = Number(process.env.OPENCLAW_WEBCHAT_EVENT_STREAM_RETRY_MS || 3000);
+const EVENT_STREAM_KEEPALIVE_MS = Number(process.env.OPENCLAW_WEBCHAT_EVENT_STREAM_KEEPALIVE_MS || 20000);
 const lateReplyReconciliations = new Set();
 const authSessions = new Map();
 const activeTurnControllers = new Map();
@@ -58,6 +62,7 @@ const stoppedTurnStates = new Map();
 const ABORTED_ASSISTANT_REPLY = Symbol('openclaw-webchat-aborted-assistant-reply');
 const gatewayModelsCache = { value: null, expiresAt: 0, promise: null };
 const gatewaySessionsCache = { value: null, expiresAt: 0, promise: null };
+const eventStreamClients = new Map();
 
 const BOOTSTRAP_TEXT = [
   '[openclaw-webchat hidden bootstrap]',
@@ -165,6 +170,27 @@ app.get('/api/openclaw-webchat/commands', (_req, res) => {
   });
 });
 
+app.get('/api/openclaw-webchat/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  if (typeof res.flushHeaders === 'function') res.flushHeaders();
+
+  const clientId = cryptoId();
+  const keepalive = setInterval(() => {
+    writeEventStreamChunk(res, ': keepalive\n\n');
+  }, EVENT_STREAM_KEEPALIVE_MS);
+
+  eventStreamClients.set(clientId, { res, keepalive });
+  writeEventStreamChunk(res, `retry: ${EVENT_STREAM_RETRY_MS}\n\n`);
+  sendEventStreamEvent(res, 'connected', { clientId });
+
+  req.on('close', () => {
+    closeEventStreamClient(clientId);
+  });
+});
+
 app.get('/api/openclaw-webchat/agents', async (_req, res) => {
   try {
     const agents = await listAgents();
@@ -208,6 +234,11 @@ app.post('/api/openclaw-webchat/agents/:agentId/open', async (req, res) => {
     const created = !existing;
 
     const hydrated = await ensureBootstrapInjected(binding);
+    try {
+      await reconcileBindingHistory(hydrated, { limit: HISTORY_RECONCILE_FETCH_LIMIT });
+    } catch (error) {
+      console.error('[openclaw-webchat] open-time history reconciliation failed:', formatError(error));
+    }
 
     const { messages, nextBefore, hasMore } = getHistoryPage({ agentId, limit: HISTORY_OPEN_PAGE_LIMIT, before: null });
     res.json({
@@ -774,14 +805,14 @@ async function runUserTurn(binding, { text, inputBlocks }) {
       return { message: pendingMessage };
     }
 
-    const assistantBlocks = normalizeGatewayMessageToBlocks(assistantRaw);
+    const assistantBlocks = getPersistableAssistantBlocks(assistantRaw);
     const assistantMessage = normalizeHistoryRow({
       id: cryptoId(),
       agentId: binding.agentId,
       sessionKey: binding.sessionKey,
       role: 'assistant',
       createdAt: assistantRaw?.createdAt || assistantRaw?.timestamp || new Date().toISOString(),
-      blocks: assistantBlocks.length
+      blocks: assistantBlocks?.length
         ? assistantBlocks
         : [{ type: 'text', text: '（收到，但未拉取到可展示回复）' }]
     });
@@ -1096,8 +1127,8 @@ function scheduleLateAssistantReplyReconciliation(binding, { turnSnapshot, minTi
         return;
       }
 
-      const assistantBlocks = normalizeGatewayMessageToBlocks(assistantRaw);
-      if (!assistantBlocks.length || isNoReplyOnly(assistantBlocks)) {
+      const assistantBlocks = getPersistableAssistantBlocks(assistantRaw);
+      if (!assistantBlocks?.length || isNoReplyOnly(assistantBlocks)) {
         patchBinding(binding.agentId, {
           replyState: 'idle',
           updatedAt: new Date().toISOString()
@@ -1537,8 +1568,19 @@ function getBindingBySessionKey(sessionKey) {
 function patchBinding(agentId, patch) {
   const bindings = readBindings();
   if (!bindings[agentId]) throw new Error(`Binding not found: ${agentId}`);
+  const previous = bindings[agentId];
   bindings[agentId] = normalizeBindingRecord(agentId, { ...bindings[agentId], ...patch });
   writeBindings(bindings);
+  if (shouldBroadcastBindingUpdate(previous, bindings[agentId])) {
+    broadcastEventStream('agent-update', {
+      agentId,
+      sessionKey: bindings[agentId].sessionKey || null,
+      replyState: bindings[agentId].replyState || 'idle',
+      lastAssistantAt: bindings[agentId].lastAssistantAt || null,
+      lastSummary: bindings[agentId].lastSummary || '',
+      bootstrapVersion: bindings[agentId].bootstrapVersion || null
+    });
+  }
   return bindings[agentId];
 }
 
@@ -1731,17 +1773,11 @@ async function waitForAssistantReply(sessionKey, { minTimestampMs, expectedUserT
     if (signal?.aborted) return ABORTED_ASSISTANT_REPLY;
     const messages = Array.isArray(history?.messages) ? history.messages : [];
     const userIndex = findMatchingUserMessageIndex(messages, expected, minTimestampMs);
-    const scanStart = userIndex >= 0 ? userIndex + 1 : 0;
-
-    for (let index = messages.length - 1; index >= scanStart; index -= 1) {
-      const message = messages[index];
-      if (String(message?.role || '').toLowerCase() !== 'assistant') continue;
-      if (getMessageTimestampMs(message) < minTimestampMs) continue;
-
-      const blocks = normalizeGatewayMessageToBlocks(message);
-      if (!blocks.length) continue;
-      if (isNoReplyOnly(blocks)) continue;
-      return message;
+    if (userIndex >= 0) {
+      const latestAssistant = findLatestPersistableAssistantMessageAfterUser(messages, userIndex, minTimestampMs);
+      if (latestAssistant) {
+        return latestAssistant;
+      }
     }
 
     if (signal?.aborted) return ABORTED_ASSISTANT_REPLY;
@@ -1761,6 +1797,28 @@ function findMatchingUserMessageIndex(messages, expectedUserText, minTimestampMs
     if (actual && actual === expectedUserText) return index;
   }
   return -1;
+}
+
+function findLatestPersistableAssistantMessageAfterUser(messages, userIndex, minTimestampMs) {
+  for (let index = messages.length - 1; index > userIndex; index -= 1) {
+    const message = messages[index];
+    if (String(message?.role || '').toLowerCase() !== 'assistant') continue;
+    if (getMessageTimestampMs(message) < minTimestampMs) continue;
+    if (getPersistableAssistantBlocks(message)) return message;
+  }
+  return null;
+}
+
+function gatewayMessageHasToolCalls(message) {
+  const content = Array.isArray(message?.content) ? message.content : [];
+  return content.some((item) => item?.type === 'toolCall');
+}
+
+function getPersistableAssistantBlocks(message) {
+  const blocks = normalizeGatewayMessageToBlocks(message);
+  if (!blocks.length || isNoReplyOnly(blocks)) return null;
+  if (gatewayMessageHasToolCalls(message)) return null;
+  return blocks;
 }
 
 function normalizeGatewayMessageToBlocks(message) {
@@ -1871,6 +1929,194 @@ function appendHistory(agentId, sessionKey, message) {
   });
 
   fs.appendFileSync(historyFile(agentId), `${JSON.stringify(row)}\n`, 'utf8');
+  if (shouldBroadcastHistoryUpdate(row)) {
+    broadcastEventStream('conversation-update', {
+      agentId: row.agentId,
+      sessionKey: row.sessionKey || null,
+      messageId: row.id || null,
+      role: row.role || null,
+      createdAt: row.createdAt || null
+    });
+  }
+}
+
+async function reconcileBindingHistory(binding, { limit = HISTORY_RECONCILE_FETCH_LIMIT } = {}) {
+  const latestBinding = getBinding(binding.agentId) || binding;
+  const localRows = loadHistory(binding.agentId).sort(compareHistoryAsc);
+  const sessionStartMs = getCurrentSessionStartTimestampMs(localRows);
+  const history = await gatewayCall('chat.history', { sessionKey: latestBinding.upstreamSessionKey, limit });
+  const messages = Array.isArray(history?.messages) ? history.messages : [];
+  const candidates = extractReconcileAssistantRows(latestBinding, messages, localRows, sessionStartMs);
+  const appendedRows = [];
+
+  for (const candidate of candidates) {
+    if (hasEquivalentHistoryRow(localRows, candidate) || hasEquivalentHistoryRow(appendedRows, candidate)) continue;
+    appendHistory(latestBinding.agentId, latestBinding.sessionKey, candidate);
+    candidate._seq = localRows.length + appendedRows.length;
+    localRows.push(candidate);
+    appendedRows.push(candidate);
+  }
+
+  if (!appendedRows.length) return { appendedCount: 0, appendedRows: [] };
+
+  const latestAssistant = [...localRows].filter((row) => row.role === 'assistant').sort(compareHistoryAsc).at(-1) || null;
+  const latestUser = [...localRows].filter((row) => row.role === 'user').sort(compareHistoryAsc).at(-1) || null;
+  const patch = {
+    updatedAt: new Date().toISOString()
+  };
+
+  if (latestUser) patch.lastUserAt = latestUser.createdAt;
+  if (latestAssistant) {
+    patch.lastAssistantAt = latestAssistant.createdAt;
+    patch.lastSummary = buildMessageSummary(latestAssistant);
+  }
+
+  patchBinding(latestBinding.agentId, patch);
+  return {
+    appendedCount: appendedRows.length,
+    appendedRows
+  };
+}
+
+function extractReconcileAssistantRows(binding, messages, localRows, sessionStartMs = 0) {
+  const rows = [];
+  let activeUserMatchedLocalHistory = false;
+  let pendingAssistantRow = null;
+
+  const flushTurn = () => {
+    if (pendingAssistantRow && activeUserMatchedLocalHistory) rows.push(pendingAssistantRow);
+    activeUserMatchedLocalHistory = false;
+    pendingAssistantRow = null;
+  };
+
+  for (const message of messages || []) {
+    const timestampMs = getMessageTimestampMs(message);
+    if (timestampMs < sessionStartMs) continue;
+    const role = String(message?.role || '').toLowerCase();
+
+    if (role === 'user') {
+      flushTurn();
+      const userRow = buildReconcileUserHistoryRow(binding, message);
+      activeUserMatchedLocalHistory = Boolean(userRow && hasEquivalentUserHistoryRow(localRows, userRow));
+      continue;
+    }
+
+    if (role === 'assistant' && activeUserMatchedLocalHistory) {
+      const assistantRow = buildReconcileAssistantHistoryRow(binding, message);
+      if (assistantRow) pendingAssistantRow = assistantRow;
+    }
+  }
+
+  flushTurn();
+  return rows;
+}
+
+function buildReconcileUserHistoryRow(binding, message) {
+  const text = extractTextFromGatewayMessage(message);
+  if (text.includes('[openclaw-webchat hidden bootstrap]')) return null;
+  if (text.includes('[openclaw-webchat user attachments]')) return null;
+
+  const blocks = normalizeGatewayMessageToBlocks(message);
+  if (!blocks.length) return null;
+
+  return normalizeHistoryRow({
+    id: cryptoId(),
+    agentId: binding.agentId,
+    sessionKey: binding.sessionKey,
+    role: 'user',
+    createdAt: message?.createdAt || message?.timestamp || new Date().toISOString(),
+    blocks
+  });
+}
+
+function buildReconcileAssistantHistoryRow(binding, message) {
+  const blocks = getPersistableAssistantBlocks(message);
+  if (!blocks) return null;
+
+  return normalizeHistoryRow({
+    id: cryptoId(),
+    agentId: binding.agentId,
+    sessionKey: binding.sessionKey,
+    role: 'assistant',
+    createdAt: message?.createdAt || message?.timestamp || new Date().toISOString(),
+    blocks
+  });
+}
+
+function getCurrentSessionStartTimestampMs(rows) {
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (row?.role === 'marker' && row?.markerType === 'context-reset') {
+      return Date.parse(row.createdAt) || 0;
+    }
+  }
+  return 0;
+}
+
+function hasEquivalentHistoryRow(rows, candidate) {
+  const candidateCreatedAt = toIsoString(candidate?.createdAt);
+  const candidateBlocks = JSON.stringify(Array.isArray(candidate?.blocks) ? candidate.blocks : []);
+
+  return (rows || []).some((row) => {
+    if (!row || row.role !== candidate?.role) return false;
+    if (toIsoString(row.createdAt) !== candidateCreatedAt) return false;
+    return JSON.stringify(Array.isArray(row.blocks) ? row.blocks : []) === candidateBlocks;
+  });
+}
+
+function hasEquivalentUserHistoryRow(rows, candidate) {
+  const candidateTs = Date.parse(candidate?.createdAt || '') || 0;
+  const candidateBlocks = JSON.stringify(Array.isArray(candidate?.blocks) ? candidate.blocks : []);
+
+  return (rows || []).some((row) => {
+    if (!row || row.role !== 'user') return false;
+    const rowTs = Date.parse(row.createdAt || '') || 0;
+    if (Math.abs(rowTs - candidateTs) > HISTORY_RECONCILE_USER_MATCH_WINDOW_MS) return false;
+    return JSON.stringify(Array.isArray(row.blocks) ? row.blocks : []) === candidateBlocks;
+  });
+}
+
+function shouldBroadcastBindingUpdate(previous, next) {
+  if (!previous || !next) return true;
+  return normalizeOptionalString(previous.replyState) !== normalizeOptionalString(next.replyState)
+    || normalizeOptionalString(previous.lastAssistantAt) !== normalizeOptionalString(next.lastAssistantAt)
+    || normalizeOptionalString(previous.lastSummary) !== normalizeOptionalString(next.lastSummary);
+}
+
+function shouldBroadcastHistoryUpdate(row) {
+  const role = normalizeOptionalString(row?.role);
+  return role === 'assistant' || role === 'marker';
+}
+
+function sendEventStreamEvent(res, event, payload = {}) {
+  const body = JSON.stringify({
+    ...payload,
+    emittedAt: new Date().toISOString()
+  });
+  return writeEventStreamChunk(res, `event: ${event}\ndata: ${body}\n\n`);
+}
+
+function broadcastEventStream(event, payload = {}) {
+  for (const [clientId, client] of eventStreamClients.entries()) {
+    const ok = sendEventStreamEvent(client.res, event, payload);
+    if (!ok) closeEventStreamClient(clientId);
+  }
+}
+
+function writeEventStreamChunk(res, chunk) {
+  try {
+    res.write(chunk);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function closeEventStreamClient(clientId) {
+  const client = eventStreamClients.get(clientId);
+  if (!client) return;
+  clearInterval(client.keepalive);
+  eventStreamClients.delete(clientId);
 }
 
 function getHistoryPage({ agentId, limit, before }) {

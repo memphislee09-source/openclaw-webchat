@@ -23,10 +23,28 @@
 - [x] Tighten the hidden media bootstrap so local audio/mp3 outputs are explicitly sent back via `MEDIA:` / `mediaUrl:`
 - [x] Refresh existing sessions onto the new bootstrap contract and add regression coverage for audio fallback guidance
 - [x] Verify the mp3 send-path fix and record the result in docs/review notes
-- [ ] Sync the current mainline fixes/docs to GitHub before starting the event-driven refresh follow-up
-- [ ] Create a new feature branch from updated `main` for the event-driven refresh implementation
-- [ ] Replace the 10s agent polling loop with an event-driven update path while keeping a safe fallback
-- [ ] Verify the event-driven refresh branch and update docs with the new architecture/behavior
+- [x] Sync the current mainline fixes/docs to GitHub before starting the event-driven refresh follow-up
+- [x] Create a new feature branch from updated `main` for the event-driven refresh implementation
+- [x] Replace the 10s agent polling loop with an event-driven update path while keeping a safe fallback
+- [x] Verify the event-driven refresh branch and update docs with the new architecture/behavior
+- [x] Investigate the new message-list bug where manually returning to bottom can snap back to an older reading position
+- [x] Fix the stale media-load anchor restore so follow-bottom wins after the user scrolls back down
+- [x] Verify the bottom-return scroll fix and record the result in docs/review notes
+- [x] Rework the conversation scroll implementation around a unified viewport controller with preserve-position as the default
+- [x] Route render, media resize, history prepend, current-session refresh, and explicit jumps through the unified viewport policy
+- [x] Verify the scroll-controller refactor and update docs with the new model/results
+- [x] Investigate why Athena replies visible in native OpenClaw Web UI around 22:32 and 22:33 are missing from Claw WebChat
+- [x] Trace the assistant-reply matching / late-reply code path and record the concrete root cause before any fix
+- [x] Investigate why some Athena replies visible in native OpenClaw Web UI are missing in Claw WebChat
+- [x] Identify whether the missing Athena replies are lost at upstream fetch, local persistence, or frontend render time
+- [x] Record the Athena missing-reply investigation result before any fix
+- [x] Fix assistant turn completion so progress/tool-phase messages are not persisted as the final reply too early
+- [x] Add open-time upstream history reconciliation so missing assistant completions are backfilled into local JSONL
+- [x] Verify the fix against the known `main`/Athena and `wangyuyan` missing-reply cases
+- [x] Restart the Claw WebChat service and confirm health before handing testing back
+- [x] Bump the project version for the missing-reply fix follow-up
+- [x] Update changelog/status/handoff/README notes to reflect the `0.1.7` branch state and verification result
+- [x] Verify the version/doc follow-up, then commit and push `codex/sse-event-refresh` to GitHub
 
 ## Current Review
 - Verified the active repository is `claw-webchat` at `/Users/memphis/.openclaw/workspace-mira/claw-webchat`.
@@ -69,6 +87,88 @@
   Wangyuyan's binding remains on the older bootstrap until the next user turn triggers reinjection.
 - The next requested follow-up is to first sync the current mainline state to GitHub, then branch off and implement
   an event-driven refresh path in place of the fixed 10-second polling model.
+- Mainline sync completed on `main` with commit `3fd80c8` (`fix: stabilize conversation refresh behavior`), then the
+  event-driven follow-up branch was created as `codex/sse-event-refresh`.
+- The event-driven refresh branch now exposes `/api/openclaw-webchat/events` as an SSE stream, broadcasts binding/history
+  changes from the server, subscribes from the browser with `EventSource`, and reduces the old fixed 10-second polling
+  loop to a 60-second fallback safety net.
+- Verification for the event-driven follow-up passed with `npm run check`, `npm run selftest`, LaunchAgent restart +
+  `http://127.0.0.1:3770/healthz`, and a direct SSE smoke test that returned the `connected` event frame.
+- The latest regression report points to stale media-load anchor restoration: if a message captured a history-reading
+  anchor at render time and the user later scrolled back to bottom before the media finished loading, the delayed
+  load callback could still restore the old anchor and yank the viewport upward again.
+- The media-load pinning callback now re-evaluates follow-bottom mode at load time and ignores the old render-time
+  anchor once the user has moved since that render; this prevents late image/video/audio metadata loads from snapping
+  the viewport back to a stale reading position after the user has already returned to bottom.
+- Verification for the bottom-return scroll fix passed with `npm run check` and `npm run selftest`.
+- The next agreed follow-up is a deeper scroll-controller refactor: preserve the current viewport by default, make
+  bottom-follow an explicit state, and stop letting render-time, media-load, and refresh callbacks compete to set
+  `scrollTop` independently.
+- The scroll-controller refactor now introduces a unified viewport snapshot/restore path with revision invalidation and
+  programmatic-scroll guards, so rerenders, delayed media loads, history prepends, and current-session refreshes all
+  preserve the current viewport by default unless the user is explicitly in follow-bottom mode.
+- Verification for the unified scroll-controller follow-up passed with `npm run check` and `npm run selftest`.
+- Athena/native-WebUI missing-reply investigation:
+  - Athena is the `main` agent in this repo (`data/agent-profiles.json`), so the relevant local history file is
+    `data/history/main.jsonl`, not `data/history/athena.jsonl`.
+  - Local WebChat history stops at the user row `2026-03-25T14:32:39.888Z` (`这个agent创建好没有？为什么要我一直追问？`) and does not contain the two assistant replies visible upstream around `22:32` and `22:33` Beijing time.
+  - Upstream OpenClaw transcript and live `chat.history` both contain those missing assistant replies:
+    `创建好了，已经按你说的设成...` at `2026-03-25T14:32:48.538Z` and
+    `你说得对，不该让你一直追问...` at `2026-03-25T14:33:27.688Z` / `1774449196415`.
+  - Root cause is in `waitForAssistantReply(...)`: when `findMatchingUserMessageIndex(...)` cannot yet find the current
+    upstream user row, the code falls back to `scanStart = 0` and returns the latest assistant text after `minTimestampMs`.
+    Because upstream `role:user` rows can land much later than the local send time (for example local send
+    `14:22:32.490Z` maps to upstream user `14:31:38.512Z`, and local send `14:32:39.888Z` maps to upstream user
+    `14:33:00.177Z`), WebChat can capture an earlier progress reply as if it were the final reply and then stop
+    tracking the turn.
+  - A second compounding issue is that late-reply reconciliation only starts when the initial wait returns `null`
+    (`assistantRaw === null`). Once an early non-empty assistant text has already been accepted, later assistant
+    messages in the same logical turn are not reconciled back into local WebChat history.
+- The next investigation is an Athena missing-reply report: native OpenClaw Web UI shows replies around 22:32 and 22:33
+  that are not present in Claw WebChat, so the evidence chain needs to compare upstream session history, local JSONL
+  persistence, and the current reply-reconciliation path.
+- The Athena/main missing-reply report is a local-persistence gap, not a frontend render gap: upstream
+  `chat.history` contains the missing user/assistant pair (`2026-03-25T14:33:00.177Z` and
+  `2026-03-25T14:33:16.415Z`), while local `data/history/main.jsonl` stops at the user row
+  `2026-03-25T14:32:39.888Z` and the previous assistant `2026-03-25T14:24:38.691Z`.
+- Root cause at architecture level: Claw WebChat only appends assistant messages when the send-time wait path or the
+  in-memory late-reply reconciliation path succeeds; reopening a session later only replays local JSONL history and
+  does not backfill missing upstream assistant messages, so any transient failure in those persistence paths leaves a
+  permanent gap that native OpenClaw Web UI can still show from upstream history.
+- Active fix plan:
+  - Tighten assistant completion detection so `waitForAssistantReply(...)` does not accept tool-phase/progress assistant
+    messages as the final persisted reply for a turn.
+  - Add an open-time upstream reconciliation pass to backfill assistant completions that already exist upstream but are
+    missing from local JSONL.
+  - Re-verify using the known `main`/Athena and `wangyuyan` missing-reply timelines before restarting the service.
+- Missing-reply fix implemented on `codex/sse-event-refresh`:
+  - `waitForAssistantReply(...)` now waits until the current upstream user row is visible and only accepts the latest
+    assistant after that user when it has persistable blocks and no `toolCall` markers, so progress/tool-phase updates
+    no longer end the turn early.
+  - Open-time `reconcileBindingHistory(...)` now pulls the current upstream session history and backfills missing
+    user/assistant rows into local JSONL for turns that were missed by the synchronous or late-reply persistence path.
+  - Late reply reconciliation now reuses the same persistable-assistant filter as the synchronous path, so the two code
+    paths no longer disagree about what counts as a final assistant reply.
+- Verification for the missing-reply fix passed with:
+  - `npm run check`
+  - `npm run selftest`
+  - `launchctl kickstart -k gui/$(id -u)/ai.openclaw.webchat`
+  - `curl -sf http://127.0.0.1:3770/healthz`
+- Runtime validation:
+  - Reopening `wangyuyan` now backfills the previously missing `2026-03-26T07:34:06.111Z` final news brief into local
+    WebChat history, confirming that open-time upstream reconciliation repairs an actual missed assistant completion.
+  - Replaying the current selection logic against the real upstream `wangyuyan` session now chooses the final brief
+    instead of the earlier progress texts/tool phases, which matches the intended fix for premature turn completion.
+  - The earlier `main`/Athena gap could not be re-backfilled during this verification run because `main` has since
+    moved to a newer upstream generation and the older session no longer returns `chat.history`; the old failure mode is
+    still covered by the same logic change, but only `wangyuyan` remained directly reproducible online.
+- Current branch metadata/docs follow-up:
+  - The branch version has been bumped to `0.1.7` in `package.json`, server-side fallback version reporting, and the
+    frontend About/version fallbacks.
+  - `CHANGELOG.md`, `status.md`, `docs/HANDOFF-2026-03-24.md`, and `README.md` now record the missing-reply fix and
+    distinguish the current branch version `0.1.7` from the latest published GitHub Release bundle `0.1.6`.
+  - Version/doc follow-up verification passed with `npm run check`, `npm run selftest`, and a live
+    `GET /api/openclaw-webchat/settings -> .projectInfo.version == 0.1.7` check after LaunchAgent restart.
 
 ## Previous Task Log
 - [x] Confirm repository path and current branch baseline
