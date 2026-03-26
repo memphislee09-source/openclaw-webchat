@@ -44,7 +44,7 @@
 - [x] Restart the Claw WebChat service and confirm health before handing testing back
 - [x] Bump the project version for the missing-reply fix follow-up
 - [x] Update changelog/status/handoff/README notes to reflect the `0.1.7` branch state and verification result
-- [ ] Verify the version/doc follow-up, then commit and push `codex/sse-event-refresh` to GitHub
+- [x] Verify the version/doc follow-up, then commit and push `codex/sse-event-refresh` to GitHub
 
 ## Current Review
 - Verified the active repository is `claw-webchat` at `/Users/memphis/.openclaw/workspace-mira/claw-webchat`.
@@ -167,6 +167,8 @@
     frontend About/version fallbacks.
   - `CHANGELOG.md`, `status.md`, `docs/HANDOFF-2026-03-24.md`, and `README.md` now record the missing-reply fix and
     distinguish the current branch version `0.1.7` from the latest published GitHub Release bundle `0.1.6`.
+  - Version/doc follow-up verification passed with `npm run check`, `npm run selftest`, and a live
+    `GET /api/openclaw-webchat/settings -> .projectInfo.version == 0.1.7` check after LaunchAgent restart.
 
 ## Previous Task Log
 - [x] Confirm repository path and current branch baseline
